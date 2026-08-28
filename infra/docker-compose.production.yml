@@ -23,6 +23,18 @@ services:
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
 
+  web:
+    build:
+      context: ..
+      dockerfile: apps/desktop/Dockerfile.web
+      args:
+        VITE_TOKEN_SERVER_URL: ${PUBLIC_APP_URL}
+        VITE_WEB_APP_URL: ${PUBLIC_APP_URL}
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - token-server
+
   caddy:
     image: caddy:2.10.2-alpine
     restart: unless-stopped

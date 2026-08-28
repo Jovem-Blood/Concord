@@ -29,3 +29,16 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
     ports:
       - "3001:3001/tcp"
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/desktop/Dockerfile.web
+      args:
+        VITE_TOKEN_SERVER_URL: http://localhost:3001
+        VITE_WEB_APP_URL: ${PUBLIC_APP_URL:-http://localhost:4173}
+    restart: unless-stopped
+    depends_on:
+      - token-server
+    ports:
+      - "4173:4173/tcp"

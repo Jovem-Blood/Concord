@@ -1,24 +1,27 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import type { CaptureProfile, CaptureSourceDTO } from '../../shared/capture'
+import { captureProvider } from '../services/capture/provider'
 
 const emit = defineEmits<{
   cancel: []
-  share: [source: CaptureSourceDTO, includeAudio: boolean, profile: CaptureProfile]
+  share: [source: CaptureSourceDTO | undefined, includeAudio: boolean, profile: CaptureProfile]
 }>()
 
+const isElectron = captureProvider.capabilities.environment === 'electron'
 const sources = ref<CaptureSourceDTO[]>([])
 const selectedId = ref('')
 const includeAudio = ref(false)
 const profile = ref<CaptureProfile>('smooth')
-const loading = ref(true)
+const loading = ref(isElectron)
 const error = ref('')
 
 const selectedSource = computed(() => sources.value.find((source) => source.id === selectedId.value))
 
 onMounted(async () => {
+  if (!isElectron) return
   try {
-    sources.value = await window.captureAPI.listSources()
+    sources.value = await captureProvider.listSources()
   } catch {
     error.value = 'Não foi possível carregar as telas e janelas disponíveis.'
   } finally {
@@ -40,6 +43,13 @@ onMounted(async () => {
 
       <div v-if="loading" class="empty-state">Procurando telas e janelas…</div>
       <div v-else-if="error" class="error-banner">{{ error }}</div>
+      <div v-else-if="!isElectron" class="native-picker-info">
+        <div class="native-picker-icon">▣</div>
+        <div>
+          <strong>O navegador mostrará as opções disponíveis</strong>
+          <p>Na próxima etapa, escolha uma aba, janela ou monitor no seletor seguro do navegador.</p>
+        </div>
+      </div>
       <div v-else-if="sources.length === 0" class="empty-state">Nenhuma fonte de captura foi encontrada.</div>
       <div v-else class="source-grid">
         <button
@@ -72,7 +82,11 @@ onMounted(async () => {
         </fieldset>
         <label class="check-row">
           <input v-model="includeAudio" type="checkbox" />
-          <span><strong>Compartilhar áudio do sistema</strong><small>Pode incluir áudio de outros aplicativos.</small></span>
+          <span>
+            <strong>Compartilhar áudio do sistema</strong>
+            <small v-if="isElectron">Pode incluir áudio de outros aplicativos.</small>
+            <small v-else>Opcional: depende do navegador e da fonte escolhida. Abas costumam ter melhor suporte.</small>
+          </span>
         </label>
       </div>
 
@@ -80,10 +94,10 @@ onMounted(async () => {
         <button class="button secondary" @click="emit('cancel')">Cancelar</button>
         <button
           class="button primary"
-          :disabled="!selectedSource"
-          @click="selectedSource && emit('share', selectedSource, includeAudio, profile)"
+          :disabled="isElectron && !selectedSource"
+          @click="emit('share', selectedSource, includeAudio, profile)"
         >
-          Compartilhar
+          {{ isElectron ? 'Compartilhar' : 'Escolher e compartilhar' }}
         </button>
       </footer>
     </section>

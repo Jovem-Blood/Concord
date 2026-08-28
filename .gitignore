@@ -11,6 +11,7 @@ coverage/
 *.local
 apps/desktop/.vite/
 apps/desktop/out/
+apps/desktop/dist-web/
 apps/token-server/dist/
 infra/Caddyfile
 infra/livekit.production.yaml

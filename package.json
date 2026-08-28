@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "pnpm --parallel --filter @concord/desktop --filter @concord/token-server dev",
     "dev:desktop": "pnpm --filter @concord/desktop dev",
+    "dev:web": "pnpm --filter @concord/desktop dev:web",
     "dev:server": "pnpm --filter @concord/token-server dev",
-    "build": "pnpm -r build",
+    "build": "pnpm -r build && pnpm build:web",
+    "build:web": "pnpm --filter @concord/desktop build:web",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",

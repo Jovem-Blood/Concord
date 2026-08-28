@@ -1,17 +1,22 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type { CaptureProfile, CaptureSourceDTO } from '../shared/capture'
 import type { AppError } from '../shared/errors'
 import MediaTile from './components/MediaTile.vue'
 import SourcePicker from './components/SourcePicker.vue'
 import { stopMediaStream } from './domain/capture-cleanup'
+import { createRoomLink, roomCodeFromRoute } from './domain/room-link'
 import { generateRoomCode, isValidRoomCode, normalizeRoomCode } from './domain/room-code'
 import type { RoomState, ShareState } from './domain/state'
+import { captureProvider } from './services/capture/provider'
 import { LiveKitRoomService } from './services/livekit/room'
 import type { ParticipantView, RemoteShareView } from './services/livekit/types'
 import { requestJoinToken } from './services/token'
 
 const roomService = new LiveKitRoomService()
+const route = useRoute()
+const router = useRouter()
 const displayName = ref(localStorage.getItem('displayName') ?? '')
 const roomCodeInput = ref('')
 const currentRoomCode = ref('')
@@ -22,10 +27,15 @@ const shares = shallowRef<RemoteShareView[]>([])
 const localStream = ref<MediaStream | null>(null)
 const localPreview = ref<HTMLVideoElement | null>(null)
 const errorMessage = ref('')
+const shareNotice = ref('')
 const copied = ref(false)
 const focusedShareKey = ref('')
 let cleanupPromise: Promise<void> | null = null
 
+const captureEnvironment = captureProvider.capabilities.environment
+const configuredWebAppUrl = String(import.meta.env.VITE_WEB_APP_URL ?? '').trim()
+const publicWebAppUrl = configuredWebAppUrl || (captureEnvironment === 'web' ? window.location.origin : 'http://localhost:5173')
+const invitedRoomCode = computed(() => roomCodeFromRoute(route.params.roomCode))
 const canSubmit = computed(() => displayName.value.trim().length >= 1 && roomState.value !== 'joining')
 const statusLabel = computed(() => ({
   connected: 'Conectado',
@@ -35,6 +45,15 @@ const statusLabel = computed(() => ({
   error: 'Erro de conexão',
   idle: 'Inativo',
 }[roomState.value]))
+
+watch(
+  () => route.params.roomCode,
+  (roomCode) => {
+    const normalizedCode = roomCodeFromRoute(roomCode)
+    if (normalizedCode && !currentRoomCode.value) roomCodeInput.value = normalizedCode
+  },
+  { immediate: true },
+)
 
 roomService.onSnapshot((snapshot) => {
   participants.value = snapshot.participants
@@ -71,6 +90,8 @@ async function joinRoom(roomCode: string): Promise<void> {
     await roomService.connect(credentials.serverUrl, credentials.participantToken)
     localStorage.setItem('displayName', name)
     currentRoomCode.value = normalizedCode
+    roomCodeInput.value = normalizedCode
+    await router.replace(`/${normalizedCode}`)
   } catch (error) {
     roomState.value = 'error'
     errorMessage.value = getErrorMessage(error)
@@ -92,12 +113,19 @@ async function leaveRoom(): Promise<void> {
   roomState.value = 'idle'
   participants.value = []
   shares.value = []
+  errorMessage.value = ''
+  shareNotice.value = ''
+  await router.replace('/')
 }
 
-async function copyCode(): Promise<void> {
-  await navigator.clipboard.writeText(currentRoomCode.value)
-  copied.value = true
-  window.setTimeout(() => (copied.value = false), 1500)
+async function copyLink(): Promise<void> {
+  try {
+    await writeClipboard(createRoomLink(publicWebAppUrl, currentRoomCode.value))
+    copied.value = true
+    window.setTimeout(() => (copied.value = false), 1500)
+  } catch {
+    errorMessage.value = 'Não foi possível copiar o link desta sala.'
+  }
 }
 
 function openPicker(): void {
@@ -106,25 +134,21 @@ function openPicker(): void {
 }
 
 async function cancelPicker(): Promise<void> {
-  await window.captureAPI.cancelSelection()
+  await captureProvider.cancel()
   shareState.value = 'idle'
 }
 
 async function startSharing(
-  source: CaptureSourceDTO,
+  source: CaptureSourceDTO | undefined,
   includeSystemAudio: boolean,
   profile: CaptureProfile,
 ): Promise<void> {
   shareState.value = 'starting'
   errorMessage.value = ''
+  shareNotice.value = ''
 
   try {
-    await window.captureAPI.selectSource({ sourceId: source.id, includeSystemAudio })
-    const frameRate = profile === 'smooth' ? 30 : 15
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: { width: 1920, height: 1080, frameRate },
-      audio: includeSystemAudio,
-    })
+    const stream = await captureProvider.capture({ source, includeSystemAudio, profile })
 
     localStream.value = stream
     const videoTrack = stream.getVideoTracks()[0]
@@ -132,11 +156,15 @@ async function startSharing(
     videoTrack.contentHint = profile === 'smooth' ? 'motion' : 'detail'
     videoTrack.onended = () => void stopSharing()
 
+    if (includeSystemAudio && stream.getAudioTracks().length === 0 && captureEnvironment === 'web') {
+      shareNotice.value = 'A tela está sendo transmitida sem áudio. O navegador ou a fonte escolhida não ofereceu áudio.'
+    }
+
     if (localPreview.value) localPreview.value.srcObject = stream
     await roomService.publishScreen(stream, profile)
     shareState.value = 'sharing'
   } catch (error) {
-    await window.captureAPI.cancelSelection()
+    await captureProvider.cancel()
     await stopSharing()
     if (error instanceof DOMException && error.name === 'NotAllowedError') {
       shareState.value = 'idle'
@@ -145,6 +173,23 @@ async function startSharing(
     shareState.value = 'error'
     errorMessage.value = getErrorMessage(error)
   }
+}
+
+async function writeClipboard(value: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = value
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const copiedSuccessfully = document.execCommand('copy')
+  textarea.remove()
+  if (!copiedSuccessfully) throw new Error('Clipboard unavailable')
 }
 
 function stopSharing(): Promise<void> {
@@ -186,14 +231,22 @@ onBeforeUnmount(() => {
       <h1>Entre e compartilhe.</h1>
       <p class="welcome-copy">Uma sala privada para transmitir sua tela enquanto vocês conversam onde preferirem.</p>
 
+      <div v-if="invitedRoomCode" class="invite-banner">
+        <span>Você recebeu um convite para</span>
+        <strong>{{ invitedRoomCode }}</strong>
+      </div>
+
       <label class="field">
         <span>Seu nome</span>
         <input v-model="displayName" maxlength="32" placeholder="Como seus amigos verão você" autofocus />
       </label>
 
-      <button class="button primary full" :disabled="!canSubmit" @click="createRoom">Criar uma sala</button>
+      <button v-if="invitedRoomCode" class="button primary full" :disabled="!canSubmit" @click="joinRoom(invitedRoomCode)">
+        Entrar nesta sala
+      </button>
+      <button v-else class="button primary full" :disabled="!canSubmit" @click="createRoom">Criar uma sala</button>
 
-      <div class="divider"><span>ou entre em uma</span></div>
+      <div class="divider"><span>{{ invitedRoomCode ? 'ou use outro código' : 'ou entre em uma' }}</span></div>
       <div class="join-row">
         <input
           v-model="roomCodeInput"
@@ -205,6 +258,8 @@ onBeforeUnmount(() => {
         <button class="button secondary" :disabled="!canSubmit" @click="enterRoom">Entrar</button>
       </div>
 
+      <button v-if="invitedRoomCode" class="create-alternate" :disabled="!canSubmit" @click="createRoom">Criar outra sala</button>
+
       <p v-if="roomState === 'joining'" class="status-note">Conectando à sala…</p>
       <p v-if="errorMessage" class="error-banner">{{ errorMessage }}</p>
     </section>
@@ -213,8 +268,8 @@ onBeforeUnmount(() => {
   <div v-else class="app-shell">
     <header class="topbar">
       <div class="brand-inline"><span class="brand-mark small">C</span><strong>Concord</strong></div>
-      <button class="room-code" title="Copiar código" @click="copyCode">
-        <span>Sala</span><strong>{{ currentRoomCode }}</strong><small>{{ copied ? 'Copiado!' : 'Copiar' }}</small>
+      <button class="room-code" title="Copiar link da sala" @click="copyLink">
+        <span>Sala</span><strong>{{ currentRoomCode }}</strong><small>{{ copied ? 'Copiado!' : 'Copiar link' }}</small>
       </button>
       <div class="connection-state" :data-state="roomState"><span />{{ statusLabel }}</div>
     </header>
@@ -235,6 +290,7 @@ onBeforeUnmount(() => {
 
       <section class="stage">
         <div v-if="errorMessage" class="error-banner stage-error">{{ errorMessage }}<button @click="errorMessage = ''">×</button></div>
+        <div v-if="shareNotice" class="notice-banner stage-notice">{{ shareNotice }}<button @click="shareNotice = ''">×</button></div>
 
         <div v-if="shares.length === 0 && !localStream" class="empty-stage">
           <div class="empty-illustration"><span /><span /><span /></div>

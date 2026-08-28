@@ -9,7 +9,10 @@
   "scripts": {
     "postinstall": "install-electron --no",
     "dev": "electron-forge start",
+    "dev:web": "vite --config vite.web.config.ts",
     "build": "electron-forge package",
+    "build:web": "vite build --config vite.web.config.ts",
+    "preview:web": "vite preview --config vite.web.config.ts",
     "package": "electron-forge package",
     "make": "node scripts/make-windows.mjs",
     "typecheck": "vue-tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
@@ -18,7 +21,8 @@
   },
   "dependencies": {
     "livekit-client": "2.22.1",
-    "vue": "3.5.42"
+    "vue": "3.5.42",
+    "vue-router": "5.3.0"
   },
   "devDependencies": {
     "@electron-forge/cli": "7.11.2",

@@ -4,14 +4,15 @@ set -eu
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/setup-self-host.sh [--force] [API_HOST [LIVEKIT_HOST]]
+Usage: ./scripts/setup-self-host.sh [--force] [APP_HOST [LIVEKIT_HOST]]
 
 Generate production environment files for a self-hosted Concord instance.
-If LIVEKIT_HOST is omitted, API_HOST is used for both services.
+APP_HOST serves the zero-install web client and token API.
+If LIVEKIT_HOST is omitted, APP_HOST is used for both services.
 
 Examples:
   ./scripts/setup-self-host.sh concord.example.com
-  ./scripts/setup-self-host.sh api.example.com livekit.example.com
+  ./scripts/setup-self-host.sh concord.example.com livekit.example.com
 EOF
 }
 
@@ -68,12 +69,12 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ -z "$api_host" ]; then
-  printf 'Public API hostname (for example, concord.example.com): '
+  printf 'Public app hostname (for example, concord.example.com): '
   IFS= read -r api_host
 fi
 
 if ! validate_hostname "$api_host"; then
-  printf 'Invalid API hostname: %s\n' "$api_host" >&2
+  printf 'Invalid app hostname: %s\n' "$api_host" >&2
   exit 1
 fi
 
@@ -122,11 +123,13 @@ LIVEKIT_API_KEY=$api_key
 LIVEKIT_API_SECRET=$api_secret
 PORT=3001
 ALLOWED_ORIGINS=https://$api_host
+PUBLIC_APP_URL=https://$api_host
 EOF
 
 cat >"$desktop_tmp" <<EOF
 # Rebuild the desktop app after changing this URL.
 VITE_TOKEN_SERVER_URL=https://$api_host
+VITE_WEB_APP_URL=https://$api_host
 EOF
 
 mv "$server_tmp" "$server_env"
@@ -136,6 +139,6 @@ trap - EXIT HUP INT TERM
 printf 'Generated:\n'
 printf '  %s\n' "$server_env"
 printf '  %s\n' "$desktop_env"
-printf '\nAPI URL:     https://%s\n' "$api_host"
+printf '\nApp URL:     https://%s\n' "$api_host"
 printf 'LiveKit URL: wss://%s\n' "$livekit_host"
-printf '\nNext: configure LiveKit networking and rebuild the desktop app with pnpm make.\n'
+printf '\nNext: configure LiveKit networking, start the production Compose stack, and rebuild the desktop app with pnpm make.\n'
