@@ -1,14 +1,14 @@
 livekit.example.com {
-  reverse_proxy 127.0.0.1:7880
+  reverse_proxy livekit:7880
 }
 
 concord.example.com {
   @api path /health /v1/*
   handle @api {
-    reverse_proxy 127.0.0.1:3001
+    reverse_proxy token-server:3001
   }
 
   handle {
-    reverse_proxy 127.0.0.1:4173
+    reverse_proxy web:4173
   }
 }

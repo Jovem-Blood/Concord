@@ -3,18 +3,24 @@ services:
     image: livekit/livekit-server:v1.13.5
     command: --config /etc/livekit.yaml
     restart: unless-stopped
-    network_mode: host
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
     volumes:
       - ./livekit.production.yaml:/etc/livekit.yaml:ro
+    ports:
+      # Signaling is intentionally loopback-only; publish it through Caddy or cloudflared.
+      - "127.0.0.1:7880:7880/tcp"
+      # WebRTC media must reach LiveKit directly and cannot cross an HTTP tunnel.
+      - "7881:7881/tcp"
+      - "7882:7882/udp"
+      - "3478:3478/udp"
+      - "30000-30100:30000-30100/udp"
 
   token-server:
     build:
       context: ..
       dockerfile: apps/token-server/Dockerfile
     restart: unless-stopped
-    network_mode: host
     environment:
       NODE_ENV: production
       PORT: 3001
@@ -22,23 +28,33 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+    ports:
+      - "127.0.0.1:3001:3001/tcp"
 
   web:
     build:
       context: ..
       dockerfile: apps/desktop/Dockerfile.web
       args:
-        VITE_TOKEN_SERVER_URL: ${PUBLIC_APP_URL}
+        VITE_TOKEN_SERVER_URL: ${PUBLIC_TOKEN_SERVER_URL:-${PUBLIC_APP_URL}}
         VITE_WEB_APP_URL: ${PUBLIC_APP_URL}
     restart: unless-stopped
-    network_mode: host
     depends_on:
       - token-server
+    ports:
+      - "127.0.0.1:4173:4173/tcp"
 
   caddy:
     image: caddy:2.10.2-alpine
     restart: unless-stopped
-    network_mode: host
+    depends_on:
+      - livekit
+      - token-server
+      - web
+    ports:
+      - "80:80/tcp"
+      - "443:443/tcp"
+      - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

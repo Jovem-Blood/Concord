@@ -124,6 +124,7 @@ LIVEKIT_API_SECRET=$api_secret
 PORT=3001
 ALLOWED_ORIGINS=https://$api_host
 PUBLIC_APP_URL=https://$api_host
+PUBLIC_TOKEN_SERVER_URL=https://$api_host
 EOF
 
 cat >"$desktop_tmp" <<EOF

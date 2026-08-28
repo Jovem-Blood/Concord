@@ -49,6 +49,7 @@ Variáveis do servidor:
 | `LIVEKIT_API_SECRET` | segredo somente do servidor |
 | `ALLOWED_ORIGINS` | origens web adicionais separadas por vírgula |
 | `PUBLIC_APP_URL` | URL pública do cliente web usada pelo Compose |
+| `PUBLIC_TOKEN_SERVER_URL` | URL pública da API incorporada ao build web |
 | `PORT` | porta da API, padrão `3001` |
 | `VITE_TOKEN_SERVER_URL` | URL pública da API embutida nos clientes |
 | `VITE_WEB_APP_URL` | base usada pelo Electron ao copiar links de convite |

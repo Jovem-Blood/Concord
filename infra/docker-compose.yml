@@ -10,8 +10,7 @@ services:
     ports:
       - "7880:7880/tcp"
       - "7881:7881/tcp"
-      - "3478:3478/udp"
-      - "50000-50100:50000-50100/udp"
+      - "7882:7882/udp"
 
   token-server:
     build:
@@ -35,7 +34,7 @@ services:
       context: ..
       dockerfile: apps/desktop/Dockerfile.web
       args:
-        VITE_TOKEN_SERVER_URL: http://localhost:3001
+        VITE_TOKEN_SERVER_URL: ${PUBLIC_TOKEN_SERVER_URL:-http://localhost:3001}
         VITE_WEB_APP_URL: ${PUBLIC_APP_URL:-http://localhost:4173}
     restart: unless-stopped
     depends_on:
