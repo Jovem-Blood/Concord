@@ -45,7 +45,7 @@ Variáveis do servidor:
 | `ALLOWED_ORIGINS` | origens web adicionais separadas por vírgula |
 | `PORT` | porta da API, padrão `3001` |
 
-Para apontar o desktop a outra API, crie `apps/desktop/.env.local` com `VITE_TOKEN_SERVER_URL=https://api.example.com` antes do build. O segredo LiveKit nunca entra no pacote Electron.
+Para preparar uma instalação self-hosted, execute `./scripts/setup-self-host.sh api.example.com livekit.example.com`. O script gera chaves seguras em `.env` e configura `apps/desktop/.env.local` antes do build. O segredo LiveKit nunca entra no pacote Electron.
 
 ## Verificações
 
