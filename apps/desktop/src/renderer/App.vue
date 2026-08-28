@@ -87,7 +87,7 @@ async function joinRoom(roomCode: string): Promise<void> {
   errorMessage.value = ''
   try {
     const credentials = await requestJoinToken(normalizedCode, name)
-    await roomService.connect(credentials.serverUrl, credentials.participantToken)
+    await roomService.connect(credentials.serverUrl, credentials.participantToken, credentials.iceServers)
     localStorage.setItem('displayName', name)
     currentRoomCode.value = normalizedCode
     roomCodeInput.value = normalizedCode

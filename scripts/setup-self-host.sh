@@ -125,6 +125,10 @@ PORT=3001
 ALLOWED_ORIGINS=https://$api_host
 PUBLIC_APP_URL=https://$api_host
 PUBLIC_TOKEN_SERVER_URL=https://$api_host
+# Optional Cloudflare Realtime TURN credentials. Configure both values together.
+CLOUDFLARE_TURN_KEY_ID=
+CLOUDFLARE_TURN_API_TOKEN=
+CLOUDFLARE_TURN_TTL_SECONDS=7200
 EOF
 
 cat >"$desktop_tmp" <<EOF

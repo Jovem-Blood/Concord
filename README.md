@@ -50,11 +50,20 @@ Variáveis do servidor:
 | `ALLOWED_ORIGINS` | origens web adicionais separadas por vírgula |
 | `PUBLIC_APP_URL` | URL pública do cliente web usada pelo Compose |
 | `PUBLIC_TOKEN_SERVER_URL` | URL pública da API incorporada ao build web |
+| `CLOUDFLARE_TURN_KEY_ID` | identificador privado da chave do Cloudflare Realtime TURN |
+| `CLOUDFLARE_TURN_API_TOKEN` | token privado usado pelo servidor para gerar credenciais TURN temporárias |
+| `CLOUDFLARE_TURN_TTL_SECONDS` | validade das credenciais TURN, padrão `7200`, máximo `172800` |
 | `PORT` | porta da API, padrão `3001` |
 | `VITE_TOKEN_SERVER_URL` | URL pública da API embutida nos clientes |
 | `VITE_WEB_APP_URL` | base usada pelo Electron ao copiar links de convite |
 
 Para preparar uma instalação self-hosted, execute `./scripts/setup-self-host.sh concord.example.com livekit.example.com`. O script gera chaves seguras em `.env` e configura `apps/desktop/.env.local` antes do build. O segredo LiveKit nunca entra no navegador nem no pacote Electron.
+
+### Cloudflare Realtime TURN
+
+Quando `CLOUDFLARE_TURN_KEY_ID` e `CLOUDFLARE_TURN_API_TOKEN` estão configurados, cada chamada válida a `/v1/join` gera credenciais TURN temporárias no servidor e as entrega ao `livekit-client` como `RTCConfiguration.iceServers`. O token permanente da Cloudflare permanece somente no token-server. As URLs alternativas na porta 53 são removidas para evitar timeouts em navegadores.
+
+O desenvolvimento local não precisa dessas variáveis: os testes usam uma resposta Cloudflare simulada. O TURN é usado como fallback (`iceTransportPolicy: all`), portanto conexões diretas continuam preferidas quando disponíveis.
 
 ## Verificações
 

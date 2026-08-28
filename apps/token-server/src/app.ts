@@ -5,10 +5,18 @@ import { randomUUID } from 'node:crypto'
 import { AccessToken } from 'livekit-server-sdk'
 import type { ServerConfig } from './config.js'
 import { parseJoinInput, type JoinInput } from './validation.js'
+import {
+  createCloudflareTurnCredentialsProvider,
+  type TurnCredentialsProvider,
+} from './turn.js'
 
 type TokenIssuer = (input: JoinInput) => Promise<string>
 
-export async function buildApp(config: ServerConfig, tokenIssuer?: TokenIssuer) {
+export async function buildApp(
+  config: ServerConfig,
+  tokenIssuer?: TokenIssuer,
+  turnCredentialsProvider?: TurnCredentialsProvider,
+) {
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? 'info',
@@ -46,6 +54,9 @@ export async function buildApp(config: ServerConfig, tokenIssuer?: TokenIssuer) 
     })
     return token.toJwt()
   })
+  const issueTurnCredentials =
+    turnCredentialsProvider ??
+    (config.cloudflareTurn ? createCloudflareTurnCredentialsProvider(config.cloudflareTurn) : undefined)
 
   app.get('/health', async () => ({ status: 'ok' }))
 
@@ -59,11 +70,15 @@ export async function buildApp(config: ServerConfig, tokenIssuer?: TokenIssuer) 
     }
 
     request.log.info({ event: 'room.join.request', roomCode: input.roomCode })
-    const participantToken = await issueToken(input)
+    const [participantToken, iceServers] = await Promise.all([
+      issueToken(input),
+      issueTurnCredentials?.(),
+    ])
 
     return reply.send({
       serverUrl: config.livekitUrl,
       participantToken,
+      ...(iceServers ? { iceServers } : {}),
     })
   })
 

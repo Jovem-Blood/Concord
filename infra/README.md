@@ -39,6 +39,24 @@ O script cria dois arquivos privados, ignorados pelo Git:
 
 O Compose constrói o cliente web com `PUBLIC_APP_URL` e `PUBLIC_TOKEN_SERVER_URL`. Essas variáveis são incorporadas ao JavaScript durante o build: depois de alterá-las, execute novamente com `--build`. Execute `pnpm make` sempre que a URL pública mudar para atualizar também o Electron.
 
+### Cloudflare Realtime TURN
+
+Para usar o relay gerenciado, adicione ao `.env` do servidor:
+
+```env
+CLOUDFLARE_TURN_KEY_ID=seu-key-id
+CLOUDFLARE_TURN_API_TOKEN=seu-api-token
+CLOUDFLARE_TURN_TTL_SECONDS=7200
+```
+
+As duas credenciais são passadas somente ao `token-server`. A API gera credenciais efêmeras no `/v1/join`; nenhum segredo permanente é incorporado aos builds web ou Electron. Depois de editar o `.env`, recrie somente o serviço da API:
+
+```sh
+docker compose --env-file .env -f infra/docker-compose.production.yml up -d --build token-server
+```
+
+O host precisa de saída HTTPS para `rtc.live.cloudflare.com`. Os participantes precisam conseguir acessar `turn.cloudflare.com` por UDP/TCP ou TLS, incluindo a alternativa TLS em `443/TCP`.
+
 ### Cloudflare Tunnel
 
 Com Cloudflare Tunnel, mantenha um hostname para o aplicativo e outro para o signaling LiveKit. Encaminhe as rotas da API antes da rota geral do cliente web:

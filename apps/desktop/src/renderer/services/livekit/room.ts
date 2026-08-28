@@ -34,7 +34,7 @@ export class LiveKitRoomService {
     this.connectionListener = listener
   }
 
-  async connect(serverUrl: string, token: string): Promise<void> {
+  async connect(serverUrl: string, token: string, iceServers?: RTCIceServer[]): Promise<void> {
     await this.disconnect()
 
     const room = new Room({ adaptiveStream: true, dynacast: true })
@@ -62,7 +62,11 @@ export class LiveKitRoomService {
       })
 
     try {
-      await room.connect(serverUrl, token)
+      await room.connect(
+        serverUrl,
+        token,
+        iceServers?.length ? { rtcConfig: { iceServers, iceTransportPolicy: 'all' } } : undefined,
+      )
       this.connectionListener?.('connected')
       this.emitSnapshot()
     } catch (error) {
