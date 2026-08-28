@@ -1,0 +1,19 @@
+{
+  "name": "concord-screen-share",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @concord/desktop --filter @concord/token-server dev",
+    "dev:desktop": "pnpm --filter @concord/desktop dev",
+    "dev:server": "pnpm --filter @concord/token-server dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "make": "pnpm --filter @concord/desktop make"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

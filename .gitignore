@@ -1,0 +1,16 @@
+node_modules/
+.pnpm-store/
+.env
+.env.*
+!.env.example
+dist/
+out/
+.vite/
+coverage/
+*.log
+*.local
+apps/desktop/.vite/
+apps/desktop/out/
+apps/token-server/dist/
+infra/Caddyfile
+infra/livekit.production.yaml

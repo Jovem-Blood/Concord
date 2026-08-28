@@ -1,0 +1,7 @@
+node_modules
+.git
+.env
+apps/*/dist
+apps/desktop/.vite
+apps/desktop/out
+coverage
