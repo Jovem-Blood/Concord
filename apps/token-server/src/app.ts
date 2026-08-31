@@ -4,12 +4,13 @@ import Fastify, { type FastifyRequest } from 'fastify'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import type { ServerConfig } from './config.js'
 import { parseJoinInput } from './validation.js'
+import { validMediaSource, type MediaSource } from './media.js'
 import { createCloudflareTurnCredentialsProvider, type TurnCredentialsProvider } from './turn.js'
 import { createSfuClient, type SfuClient, type SessionDescription, type SfuTrack } from './sfu.js'
 
 const PRESENCE_TTL = 120_000
 const TOKEN_TTL = 2 * 60 * 60 * 1000
-type PublishedTrack = { mid: string; trackName: string; kind: 'video' | 'audio' }
+type PublishedTrack = { mid: string; trackName: string; kind: 'video' | 'audio'; source: MediaSource }
 type Participant = {
   identity: string
   name: string
@@ -19,6 +20,8 @@ type Participant = {
   sessionId?: string
   published: Map<string, PublishedTrack>
   mids: Set<string>
+  channels: Map<number, { location: 'local' | 'remote'; sessionId?: string }>
+  dataEstablished: boolean
   busy: boolean
 }
 
@@ -73,9 +76,17 @@ export async function buildApp(
   async function closeSession(member: Participant): Promise<void> {
     const sessionId = member.sessionId
     const tracks = [...member.mids].map((mid) => ({ mid }))
+    const dataChannels = [...member.channels.keys()].map((id) => ({ id }))
     member.sessionId = undefined
     member.mids.clear()
     member.published.clear()
+    member.channels.clear()
+    member.dataEstablished = false
+    if (sessionId && dataChannels.length) {
+      await sfu.request(sessionId, 'datachannels/close', { dataChannels }).catch(() => {
+        app.log.warn({ event: 'sfu.data.cleanup.failed' })
+      })
+    }
     if (sessionId && tracks.length) {
       await sfu.request(sessionId, 'tracks/close', { tracks, force: true }).catch(() => {
         app.log.warn({ event: 'sfu.cleanup.failed' })
@@ -127,7 +138,7 @@ export async function buildApp(
     const expiresAt = Date.now() + Math.min(TOKEN_TTL, (config.cloudflareTurn?.ttlSeconds ?? 7200) * 1000)
     members.set(tokenHash(participantToken), {
       identity, name: input.displayName, roomCode: input.roomCode, expiresAt, lastSeen: Date.now(),
-      published: new Map(), mids: new Set(), busy: false,
+      published: new Map(), mids: new Set(), channels: new Map(), dataEstablished: false, busy: false,
     })
     return reply.header('cache-control', 'no-store').send({ participantToken, identity, expiresAt, iceServers })
   })
@@ -135,11 +146,15 @@ export async function buildApp(
     const current = authenticate(request)
     const participants = [...members.values()].filter((p) => active(p) && p.roomCode === current.roomCode)
     return reply.header('cache-control', 'no-store').send({
-      participants: participants.map((p) => ({ identity: p.identity, name: p.name })),
+      participants: participants.map((p) => ({ identity: p.identity, name: p.name,
+        voice: { available: [...p.published.values()].some((t) => t.source === 'microphone') } })),
       tracks: participants.flatMap((p) => [...p.published.values()].map((track) => ({
         participantIdentity: p.identity, participantName: p.name, sessionId: p.sessionId,
-        trackName: track.trackName, kind: track.kind,
+        trackName: track.trackName, kind: track.kind, source: track.source,
       }))),
+      channels: participants.filter((p) => [...p.channels.values()].some((c) => c.location === 'local')).map((p) => ({
+        participantIdentity: p.identity, participantName: p.name, sessionId: p.sessionId, dataChannelName: 'concord-chat',
+      })),
     })
   })
   // Replacing a session withdraws its publications, including during network recovery.
@@ -162,11 +177,11 @@ export async function buildApp(
     let safeTracks: SfuTrack[]
     if (local) {
       if (!description(body.sessionDescription) || body.sessionDescription.type !== 'offer') fail(400, 'An SDP offer is required.')
-      if (tracks.length + member.published.size > 2) fail(400, 'Only one screen and its audio may be published.')
-      if (!tracks.every((t) => identifier(t.mid) && identifier(t.trackName) && (t.kind === 'audio' || t.kind === 'video'))) fail(400, 'Invalid local tracks.')
+      if (tracks.length + member.published.size > 3) fail(400, 'Only one track per media source may be published.')
+      if (!tracks.every((t) => identifier(t.mid) && identifier(t.trackName) && validMediaSource(t.source, t.kind))) fail(400, 'Invalid local tracks.')
       if (new Set(tracks.map((t) => t.mid)).size !== tracks.length ||
-          new Set(tracks.map((t) => t.trackName)).size !== tracks.length ||
-          new Set([...member.published.values(), ...tracks].map((t) => t.kind)).size !== member.published.size + tracks.length ||
+          new Set([...member.published.values(), ...tracks].map((t) => t.trackName)).size !== member.published.size + tracks.length ||
+          new Set([...member.published.values(), ...tracks].map((t) => t.source)).size !== member.published.size + tracks.length ||
           tracks.some((t) => member.mids.has(t.mid as string))) fail(400, 'Duplicate local tracks.')
       safeTracks = tracks.map((t) => ({ location: 'local', mid: t.mid as string, trackName: t.trackName as string, kind: t.kind as 'audio' | 'video' }))
     } else {
@@ -188,7 +203,8 @@ export async function buildApp(
       member.mids.add(track.mid)
       const source = safeTracks.find((t) => t.trackName === track.trackName && (local || t.sessionId === track.sessionId))
       if (local && source?.kind && source.trackName) {
-        member.published.set(track.mid, { mid: track.mid, trackName: source.trackName, kind: source.kind })
+        const input = tracks.find((t) => t.trackName === source.trackName)!
+        member.published.set(track.mid, { mid: track.mid, trackName: source.trackName, kind: source.kind, source: input.source as MediaSource })
       }
     }
     return result
@@ -196,6 +212,59 @@ export async function buildApp(
   app.post('/v1/renegotiate', authenticated, (request) => exclusive(request, async (member) => {
     if (!record(request.body) || !description(request.body.sessionDescription)) fail(400, 'Invalid SDP.')
     return sfu.request(session(member), 'renegotiate', { sessionDescription: request.body.sessionDescription })
+  }))
+  // This API signals channels only. Message bodies never pass through the API.
+  app.post('/v1/chat/establish', authenticated, (request) => exclusive(request, async (member) => {
+    const body = request.body
+    if (member.dataEstablished) fail(409, 'Data transport already established.')
+    if (!record(body) || !description(body.sessionDescription) || body.sessionDescription.type !== 'offer' ||
+        !body.sessionDescription.sdp.includes('m=application')) fail(400, 'An SCTP offer is required.')
+    const result = await sfu.request(session(member), 'datachannels/establish', {
+      sessionDescription: body.sessionDescription,
+      dataChannel: { location: 'remote', dataChannelName: 'server-events' },
+    })
+    const id = result.dataChannel?.id
+    if (!Number.isInteger(id) || id! < 0 || id! > 65534 || !result.sessionDescription) throw new Error('Invalid data transport response')
+    member.channels.set(id!, { location: 'remote' })
+    member.dataEstablished = true
+    return result
+  }))
+  app.post('/v1/chat/channels', authenticated, (request) => exclusive(request, async (member) => {
+    const body = request.body
+    if (!member.dataEstablished) fail(409, 'Establish a data transport first.')
+    if (!record(body) || (body.location !== 'local' && body.location !== 'remote')) fail(400, 'Invalid channel.')
+    if (member.channels.size >= 17) fail(400, 'Channel capacity reached.')
+    const location = body.location
+    let publisherSession: string | undefined
+    if (location === 'local') {
+      if ([...member.channels.values()].some((c) => c.location === 'local')) fail(409, 'Chat already published.')
+    } else {
+      if (!identifier(body.sessionId)) fail(400, 'Invalid publisher.')
+      const publisher = [...members.values()].find((p) => active(p) && p !== member && p.roomCode === member.roomCode &&
+        p.sessionId === body.sessionId && [...p.channels.values()].some((c) => c.location === 'local'))
+      if (!publisher) fail(403, 'Channel is not published in this room.')
+      publisherSession = publisher.sessionId
+      if ([...member.channels.values()].some((c) => c.sessionId === publisherSession)) fail(409, 'Already subscribed.')
+    }
+    const channel = { location, dataChannelName: 'concord-chat', ordered: true,
+      ...(publisherSession ? { sessionId: publisherSession, waitForAck: true, canReply: false } : {}) }
+    const result = await sfu.request(session(member), 'datachannels/new', { dataChannels: [channel] })
+    const returned = result.dataChannels?.[0]
+    if (result.dataChannels?.length !== 1 || returned?.errorCode || !Number.isInteger(returned?.id) ||
+        returned!.id! < 0 || returned!.id! > 65534 || member.channels.has(returned!.id!)) throw new Error('Invalid channel response')
+    member.channels.set(returned!.id!, { location, sessionId: publisherSession })
+    return { dataChannels: [{ ...channel, id: returned!.id }] }
+  }))
+  app.post('/v1/chat/close', authenticated, (request) => exclusive(request, async (member) => {
+    const body = request.body
+    if (!record(body) || !Array.isArray(body.ids) || body.ids.length < 1 || body.ids.length > 16 ||
+        !body.ids.every((id) => typeof id === 'number' && member.channels.has(id) &&
+          (member.channels.get(id)!.location === 'local' || member.channels.get(id)!.sessionId))) fail(400, 'Invalid channel ids.')
+    const result = await sfu.request(session(member), 'datachannels/close', { dataChannels: body.ids.map((id) => ({ id })) })
+    for (const id of body.ids) {
+      if (!result.dataChannels?.some((c) => c.id === id && c.errorCode)) member.channels.delete(id)
+    }
+    return result
   }))
   app.post('/v1/tracks/close', authenticated, (request) => exclusive(request, async (member) => {
     const body = request.body

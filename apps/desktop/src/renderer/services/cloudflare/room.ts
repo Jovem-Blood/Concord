@@ -1,7 +1,9 @@
 import { AppError } from '../../../shared/errors'
 import type { CaptureProfile } from '../../../shared/capture'
 import { tokenServerUrl, type JoinResponse } from '../token'
-import type { PublishedTrack, RemoteShareView, RoomPresence, RoomSnapshot, SfuResponse } from './types'
+import type { MediaSource, PublishedTrack, RemoteShareView, RemoteVoiceTrack, RoomPresence, RoomSnapshot, SfuResponse } from './types'
+import { EphemeralChat, validChatContent, type ChatSnapshot } from '../chat'
+import { ChatTransport } from './chat-transport'
 
 type ConnectionState = 'connected' | 'reconnecting' | 'disconnected'
 type Subscription = { source: PublishedTrack; mid: string }
@@ -22,8 +24,15 @@ export class CloudflareRoomService {
   private connectionListener: ((state: ConnectionState) => void) | null = null
   private presence: RoomPresence = { participants: [], tracks: [] }
   private subscriptions = new Map<string, Subscription>()
-  private localTransceivers: RTCRtpTransceiver[] = []
+  private localTransceivers = new Map<MediaSource, RTCRtpTransceiver>()
   private localStream: MediaStream | null = null
+  private microphone: MediaStreamTrack | null = null
+  private chatTransport: ChatTransport | null = null
+  private chatListener: ((snapshot: ChatSnapshot) => void) | null = null
+  private chat = new EphemeralChat((snapshot) => this.chatListener?.(snapshot))
+  private localName = ''
+  private chatSuspended = false
+  private chatRequested = false
   private profile: CaptureProfile = 'smooth'
   private needsReset = false
   private disconnectedAt = 0
@@ -31,6 +40,21 @@ export class CloudflareRoomService {
 
   onSnapshot(listener: (snapshot: RoomSnapshot) => void): void { this.snapshotListener = listener }
   onConnection(listener: (state: ConnectionState) => void): void { this.connectionListener = listener }
+  onChat(listener: (snapshot: ChatSnapshot) => void): void { this.chatListener = listener }
+  setChatOpen(open: boolean): void {
+    this.chat.setOpen(open)
+    if (open) {
+      this.chatRequested = true
+      void this.enqueue(() => this.ensureChat()).catch(() => this.chat.setReady(false))
+    }
+  }
+  sendChat(content: string): boolean {
+    if (!this.credentials || this.chatSuspended || !validChatContent(content) || !this.chat.allow(this.credentials.identity)) return false
+    const payload = { id: crypto.randomUUID(), type: 'text' as const, content, sentAt: Date.now() }
+    if (!this.chatTransport?.send(JSON.stringify(payload))) return false
+    this.chat.append(payload, this.credentials.identity, this.localName, false)
+    return true
+  }
 
   async connect(credentials: JoinResponse): Promise<void> {
     await this.disconnect()
@@ -56,16 +80,17 @@ export class CloudflareRoomService {
         throw new AppError('CAPTURE_SOURCE_GONE', 'A fonte selecionada não está mais disponível.')
       }
       try {
-        await this.unpublish()
+        await this.unpublish(['screen-video', 'screen-audio'])
         this.localStream = stream
         this.profile = profile
         await this.publish()
       } catch (error) {
         this.localStream = null
         stream.getTracks().forEach((track) => track.stop())
-        // Publishing failed, but room polling is still healthy. Retry media only on the next explicit share.
         this.disposePeer()
-        this.connectionListener?.('connected')
+        // Restore another active source, but never retry the failed capture itself.
+        if (this.microphone?.readyState === 'live') this.signalReconnecting()
+        else this.connectionListener?.('connected')
         throw new AppError('TRACK_PUBLISH_FAILED', 'A captura iniciou, mas não pôde ser transmitida.', { cause: error })
       }
     })
@@ -76,10 +101,33 @@ export class CloudflareRoomService {
     this.localStream?.getTracks().forEach((track) => track.stop())
     this.localStream = null
     return this.enqueue(async () => {
-      try { await this.unpublish() } catch {
+      try { await this.unpublish(['screen-video', 'screen-audio']) } catch {
         this.needsReset = true
-        this.connectionListener?.('reconnecting')
+        this.signalReconnecting()
       }
+    })
+  }
+
+  publishMicrophone(track: MediaStreamTrack): Promise<void> {
+    return this.enqueue(async () => {
+      if (!this.credentials || track.kind !== 'audio' || track.readyState !== 'live') throw new Error('Microfone indisponível.')
+      await this.unpublish(['microphone'])
+      this.microphone = track
+      try { await this.publish() } catch (error) {
+        this.microphone = null
+        track.stop()
+        this.disposePeer()
+        if (this.localStream?.getVideoTracks().some((t) => t.readyState === 'live')) this.signalReconnecting()
+        else this.connectionListener?.('connected')
+        throw new AppError('TRACK_PUBLISH_FAILED', 'Não foi possível transmitir o microfone. Tente novamente.', { cause: error })
+      }
+    })
+  }
+  unpublishMicrophone(): Promise<void> {
+    this.microphone?.stop()
+    this.microphone = null
+    return this.enqueue(async () => {
+      try { await this.unpublish(['microphone']) } catch { this.needsReset = true; this.signalReconnecting() }
     })
   }
 
@@ -91,8 +139,11 @@ export class CloudflareRoomService {
     clearTimeout(this.timer)
     this.localStream?.getTracks().forEach((track) => track.stop())
     this.localStream = null
+    this.microphone?.stop()
+    this.microphone = null
     this.disposePeer()
     this.presence = { participants: [], tracks: [] }
+    this.chatRequested = false
     this.emitSnapshot()
     await this.queue.catch(() => undefined)
     if (credentials) {
@@ -151,7 +202,7 @@ export class CloudflareRoomService {
       } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
         this.disconnectedAt ||= Date.now()
         this.needsReset ||= pc.connectionState === 'failed'
-        this.connectionListener?.('reconnecting')
+        this.signalReconnecting()
       }
     }
     return pc
@@ -172,21 +223,40 @@ export class CloudflareRoomService {
 
   private async publish(): Promise<void> {
     const stream = this.localStream
-    if (!stream) return
-    const tracks = stream.getTracks().filter((track) => track.readyState === 'live')
-    if (!tracks.some((track) => track.kind === 'video')) { this.localStream = null; return }
+    const wanted: { source: MediaSource; track: MediaStreamTrack; stream?: MediaStream }[] = []
+    if (this.microphone?.readyState === 'live') wanted.push({ source: 'microphone', track: this.microphone })
+    if (stream?.getVideoTracks().some((t) => t.readyState === 'live')) {
+      for (const track of stream.getTracks().filter((t) => t.readyState === 'live')) {
+        const source = track.kind === 'video' ? 'screen-video' : 'screen-audio'
+        if (!wanted.some((t) => t.source === source)) wanted.push({ source, track, stream })
+      }
+    }
+    const tracks = wanted.filter((t) => !this.localTransceivers.has(t.source))
+    if (!tracks.length) return
     const pc = await this.ensurePeer()
-    this.localTransceivers = tracks.map((track) => pc.addTransceiver(track, {
-      direction: 'sendonly', streams: [stream],
-      sendEncodings: [{ maxBitrate: track.kind === 'audio' ? 128_000 : this.profile === 'smooth' ? 5_000_000 : 3_000_000,
+    for (const { track, source, stream: mediaStream } of tracks) {
+      const transceiver = pc.addTransceiver(track, {
+      direction: 'sendonly', ...(mediaStream ? { streams: [mediaStream] } : {}),
+      sendEncodings: [{ maxBitrate: source === 'microphone' ? 64_000 : track.kind === 'audio' ? 128_000 : this.profile === 'smooth' ? 5_000_000 : 3_000_000,
         ...(track.kind === 'video' ? { maxFramerate: this.profile === 'smooth' ? 30 : 15 } : {}) }],
-    }))
+      })
+      // Prefer Opus for speech without rewriting negotiated SDP.
+      if (source === 'microphone' && typeof RTCRtpSender !== 'undefined') {
+        const codecs = RTCRtpSender.getCapabilities('audio')?.codecs
+        if (codecs?.some((c) => c.mimeType.toLowerCase() === 'audio/opus')) {
+          transceiver.setCodecPreferences([...codecs].sort((a, b) => Number(b.mimeType.toLowerCase() === 'audio/opus') - Number(a.mimeType.toLowerCase() === 'audio/opus')))
+        }
+      }
+      this.localTransceivers.set(source, transceiver)
+    }
     await pc.setLocalDescription(await pc.createOffer())
     // Browser track IDs are opaque; use our own portable names in the signaling API.
-    const publications = this.localTransceivers.map((transceiver) => ({
+    const publications = tracks.map(({ source }) => {
+      const transceiver = this.localTransceivers.get(source)!
+      return {
       location: 'local', mid: transceiver.mid, trackName: crypto.randomUUID(),
-      kind: transceiver.sender.track!.kind,
-    }))
+      kind: transceiver.sender.track!.kind, source,
+    } })
     const result = await this.api<SfuResponse>('tracks', {
       sessionDescription: pc.localDescription!.toJSON(),
       tracks: publications,
@@ -199,10 +269,12 @@ export class CloudflareRoomService {
     await this.waitConnected(pc)
   }
 
-  private async unpublish(): Promise<void> {
-    const transceivers = this.localTransceivers
-    this.localTransceivers = []
-    this.localStream = null
+  private async unpublish(sources: MediaSource[]): Promise<void> {
+    const transceivers = sources.flatMap((source) => {
+      const transceiver = this.localTransceivers.get(source)
+      this.localTransceivers.delete(source)
+      return transceiver ? [transceiver] : []
+    })
     for (const transceiver of transceivers) {
       await transceiver.sender.replaceTrack(null).catch(() => undefined)
       transceiver.stop()
@@ -216,6 +288,7 @@ export class CloudflareRoomService {
 
   private async synchronize(): Promise<void> {
     this.presence = await this.api<RoomPresence>('room')
+    this.localName = this.presence.participants.find((p) => p.identity === this.credentials?.identity)?.name ?? ''
     this.emitSnapshot()
     if (this.disconnectedAt && Date.now() - this.disconnectedAt > 8_000) this.needsReset = true
     if (this.needsReset) {
@@ -238,6 +311,7 @@ export class CloudflareRoomService {
       }
       this.emitSnapshot()
     }
+    if (this.chatRequested) await this.ensureChat()
     const added = wanted.filter((t) => !this.subscriptions.has(trackKey(t)))
     for (let offset = 0; offset < added.length; offset += 32) {
       const batch = added.slice(offset, offset + 32)
@@ -262,7 +336,7 @@ export class CloudflareRoomService {
     this.timer = setTimeout(() => {
       void this.enqueue(() => this.synchronize()).then(() => {
         this.failures = 0
-        if (!this.pc || this.pc.connectionState === 'connected' || this.pc.connectionState === 'new') {
+        if (!this.needsReset && (!this.pc || this.pc.connectionState === 'connected' || this.pc.connectionState === 'new')) {
           this.connectionListener?.('connected')
         }
       }).catch((error: unknown) => {
@@ -273,7 +347,7 @@ export class CloudflareRoomService {
           return
         }
         this.needsReset = true
-        this.connectionListener?.('reconnecting')
+        this.signalReconnecting()
       }).finally(() => {
         if (generation === this.generation && this.credentials) this.schedule()
       })
@@ -303,6 +377,10 @@ export class CloudflareRoomService {
   }
 
   private disposePeer(): void {
+    this.chatTransport?.dispose()
+    this.chatTransport = null
+    this.chat.reset()
+    this.chatSuspended = false
     const pc = this.pc
     this.pc = null
     if (pc) {
@@ -310,29 +388,64 @@ export class CloudflareRoomService {
       pc.onconnectionstatechange = null
       pc.close()
     }
-    this.localTransceivers = []
+    this.localTransceivers.clear()
     this.subscriptions.clear()
     this.needsReset = false
     this.disconnectedAt = 0
   }
 
+  private signalReconnecting(): void {
+    if (!this.chatSuspended) this.chat.reset()
+    this.chatSuspended = true
+    this.needsReset = true
+    this.connectionListener?.('reconnecting')
+  }
+  private async ensureChat(): Promise<void> {
+    try {
+      if (!this.chatTransport) {
+        const pc = await this.ensurePeer()
+        const transport = new ChatTransport(pc, (path, body) => this.api(path, body),
+          (data, source) => { if (!this.chatSuspended) this.chat.receive(data, source) },
+          (ready) => this.chat.setReady(ready && !this.chatSuspended))
+        this.chatTransport = transport
+        await transport.establish()
+        await this.waitConnected(pc)
+      }
+      await this.chatTransport.synchronize((this.presence.channels ?? []).filter((c) => c.participantIdentity !== this.credentials?.identity))
+      this.chatSuspended = false
+      this.chat.setReady(this.chatTransport.isReady())
+    } catch {
+      // A failed SCTP offer may leave the shared SDP state unusable. Rebuild it while
+      // retaining the live media tracks; chat history is intentionally discarded.
+      this.disposePeer()
+      this.signalReconnecting()
+    }
+  }
+
   private emitSnapshot(): void {
     const shares = new Map<string, RemoteShareView>()
+    const remoteVoiceTracks: RemoteVoiceTrack[] = []
     for (const { source, mid } of this.subscriptions.values()) {
       const track = this.pc?.getTransceivers().find((t) => t.mid === mid)?.receiver.track
       if (!track || track.readyState === 'ended') continue
+      if (source.source === 'microphone') {
+        remoteVoiceTracks.push({ key: trackKey(source), participantIdentity: source.participantIdentity,
+          participantName: source.participantName, track })
+        continue
+      }
       const key = `${source.participantIdentity}:${source.sessionId}`
       const share = shares.get(key) ?? {
         key, participantIdentity: source.participantIdentity, participantName: source.participantName,
         streamName: source.sessionId,
       }
-      if (source.kind === 'video') share.videoTrack = track
-      else share.audioTrack = track
+      if (source.source === 'screen-video') share.videoTrack = track
+      else if (source.source === 'screen-audio') share.audioTrack = track
       shares.set(key, share)
     }
     this.snapshotListener?.({
-      participants: this.presence.participants.map((p) => ({ ...p, isLocal: p.identity === this.credentials?.identity })),
+      participants: this.presence.participants.map((p) => ({ ...p, voice: p.voice ?? { available: false }, isLocal: p.identity === this.credentials?.identity })),
       shares: [...shares.values()],
+      remoteVoiceTracks,
     })
   }
 }
