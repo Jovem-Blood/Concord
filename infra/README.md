@@ -1,95 +1,66 @@
 # Infraestrutura
 
-## Desenvolvimento local
+A mídia usa Cloudflare Realtime Serverless SFU. Não há servidor de mídia local, hostname de signaling separado nem portas de entrada UDP para WebRTC no host do Concord. A API Fastify mantém presença e autoriza operações; o cliente negocia WebRTC diretamente com a Cloudflare.
 
-1. Copie `../.env.example` para `../.env`.
-2. Na raiz, execute `docker compose --env-file .env -f infra/docker-compose.yml up --build`.
-3. O LiveKit ficará em `ws://localhost:7880`, a API em `http://localhost:3001` e o cliente web em `http://localhost:4173`.
+## Desenvolvimento
 
-O `node_ip` do arquivo local anuncia `127.0.0.1` para que o ICE funcione através das portas publicadas pelo Docker Desktop. Não reutilize esse arquivo em produção.
+1. Copie `.env.example` para `.env`, preservando uma configuração existente.
+2. Crie um aplicativo em Cloudflare → Realtime → Serverless SFU e preencha `CLOUDFLARE_SFU_APP_ID` e `CLOUDFLARE_SFU_APP_SECRET`.
+3. Execute `docker compose --env-file .env -f infra/docker-compose.yml up --build`.
+4. Abra `http://localhost:4173`; a API fica em `http://localhost:3001`.
 
-As credenciais do exemplo são públicas e servem somente para desenvolvimento local.
+Sem Docker: `pnpm dev:server` carrega o `.env` da raiz; em outro terminal, execute `pnpm dev:web` ou `pnpm dev:desktop`. O SFU é remoto mesmo em desenvolvimento. Testes unitários não precisam de credenciais.
 
-## Servidor de produção
+## Produção com Caddy
 
-O Compose de produção usa a rede bridge do Docker e publica portas explicitamente. Isso funciona tanto em uma VM Linux quanto em um servidor caseiro; `network_mode: host` não é necessário.
+1. Aponte `concord.example.com` para o host da aplicação.
+2. Opcionalmente execute `./scripts/setup-self-host.sh concord.example.com` para preparar arquivos novos. O script recusa sobrescrever arquivos existentes; `--force` substitui ambos e apaga suas credenciais anteriores.
+3. Preencha as credenciais SFU no `.env`. Copie `infra/Caddyfile.example` para `infra/Caddyfile` e ajuste o domínio.
+4. Execute `docker compose --env-file .env -f infra/docker-compose.production.yml up -d --build`.
+5. Configure `VITE_TOKEN_SERVER_URL` e `VITE_WEB_APP_URL` em `apps/desktop/.env.local` e execute `pnpm make` para atualizar os clientes Windows.
 
-O LiveKit precisa receber WebRTC diretamente. No firewall e, para um servidor caseiro, no redirecionamento de portas do roteador, libere:
+Somente o Caddy publica portas de entrada `80/TCP`, `443/TCP` e, opcionalmente, `443/UDP` para HTTP/3. As portas `3001` e `4173` ficam em loopback. A API precisa de saída HTTPS para `rtc.live.cloudflare.com`; os clientes precisam alcançar a rede WebRTC da Cloudflare. Não é necessário encaminhar portas do roteador para mídia.
 
-- `443/TCP` para HTTPS/WSS no Caddy;
-- `7881/TCP` para ICE/TCP;
-- `3478/UDP` para TURN/UDP;
-- `7882/UDP` para mídia WebRTC;
-- `30000-30100/UDP` para relay TURN.
+## Cloudflare Tunnel
 
-O exemplo usa a porta UDP multiplexada `7882`, evitando encaminhar a faixa ICE de milhares de portas. O TURN ainda usa uma faixa pequena própria para relay. Preserve os mesmos números nas portas externas e internas do roteador.
-
-Passos:
-
-1. Aponte `livekit.example.com` e `concord.example.com` para o servidor. Domínios separados simplificam o proxy de signaling e das rotas web.
-2. Execute `./scripts/setup-self-host.sh concord.example.com livekit.example.com`. Use `--force` somente para substituir uma configuração existente.
-3. Copie `livekit.production.example.yaml` para `livekit.production.yaml`. Ajuste `turn.example.com` para um hostname DNS-only apontando ao IP público do servidor.
-4. Copie `Caddyfile.example` para `Caddyfile` e ajuste os domínios.
-5. Execute `docker compose --env-file .env -f infra/docker-compose.production.yml up -d --build`.
-
-O script cria dois arquivos privados, ignorados pelo Git:
-
-- `.env`, usado pelo LiveKit e pelo servidor de tokens;
-- `apps/desktop/.env.local`, usado durante o build do Electron.
-
-O Compose constrói o cliente web com `PUBLIC_APP_URL` e `PUBLIC_TOKEN_SERVER_URL`. Essas variáveis são incorporadas ao JavaScript durante o build: depois de alterá-las, execute novamente com `--build`. Execute `pnpm make` sempre que a URL pública mudar para atualizar também o Electron.
-
-### Cloudflare Realtime TURN
-
-Para usar o relay gerenciado, adicione ao `.env` do servidor:
-
-```env
-CLOUDFLARE_TURN_KEY_ID=seu-key-id
-CLOUDFLARE_TURN_API_TOKEN=seu-api-token
-CLOUDFLARE_TURN_TTL_SECONDS=7200
-```
-
-As duas credenciais são passadas somente ao `token-server`. A API gera credenciais efêmeras no `/v1/join`; nenhum segredo permanente é incorporado aos builds web ou Electron. Depois de editar o `.env`, recrie somente o serviço da API:
-
-```sh
-docker compose --env-file .env -f infra/docker-compose.production.yml up -d --build token-server
-```
-
-O host precisa de saída HTTPS para `rtc.live.cloudflare.com`. Os participantes precisam conseguir acessar `turn.cloudflare.com` por UDP/TCP ou TLS, incluindo a alternativa TLS em `443/TCP`.
-
-### Cloudflare Tunnel
-
-Com Cloudflare Tunnel, mantenha um hostname para o aplicativo e outro para o signaling LiveKit. Encaminhe as rotas da API antes da rota geral do cliente web:
+Você também pode expor apenas HTTPS pelo Tunnel:
 
 ```yaml
 ingress:
   - hostname: concord.example.com
     path: ^/(health|v1/.*)$
-    service: http://127.0.0.1:3001
+    service: http://localhost:3001
   - hostname: concord.example.com
-    service: http://127.0.0.1:4173
-  - hostname: livekit.example.com
-    service: http://127.0.0.1:7880
+    service: http://localhost:4173
   - service: http_status:404
 ```
 
-Nesse caso, o Caddy não é necessário. Inicie apenas os outros serviços:
+Nesse caso, suba somente os serviços de aplicação:
 
 ```sh
-docker compose --env-file .env -f infra/docker-compose.production.yml up -d --build livekit token-server web
+docker compose --env-file .env -f infra/docker-compose.production.yml up -d --build token-server web
 ```
 
-O Compose publica `7880`, `3001` e `4173` apenas em `127.0.0.1`, então essa configuração funciona diretamente quando o `cloudflared` roda no host. Se ele estiver em outro contêiner, conecte-o à mesma rede Compose e use `http://livekit:7880`, `http://token-server:3001` e `http://web:4173` como origens.
+Se `cloudflared` estiver em outro contêiner na mesma rede, use `http://token-server:3001` e `http://web:4173`. O Tunnel transporta a API e os arquivos web; a mídia vai do cliente para a Cloudflare sem passar pelo host Concord. Não faça cache de `/v1/*`.
 
-O Tunnel encaminha HTTPS e signaling WebSocket, mas não transporta ICE, TURN ou mídia WebRTC. Encaminhe diretamente no roteador `7881/TCP`, `7882/UDP`, `3478/UDP` e `30000-30100/UDP` para o servidor. O hostname TURN deve ficar como **DNS only** no Cloudflare; a nuvem laranja e o Tunnel não encaminham TURN/UDP.
+## Presença, segurança e operação
 
-Se a operadora usa CGNAT, o redirecionamento de portas do roteador não torna o servidor alcançável. Nesse caso, solicite um IPv4 público à operadora ou hospede um TURN em uma máquina com IP público.
+- Execute **uma única instância da API**. As salas, tokens e publicações ficam em memória. Para múltiplas réplicas, será preciso implementar armazenamento/coordenação compartilhados (por exemplo, Durable Objects).
+- Reiniciar a API encerra as sessões de sala: os usuários precisam entrar novamente. O SFU é serverless; a API de presença permanece hospedada pelo projeto.
+- O acesso continua baseado em posse do código da sala; não há contas ou controle de acesso individual.
+- Tokens aleatórios duram até duas horas (ou o TTL TURN, se menor); a API armazena somente seus hashes. Credenciais vencidas exigem nova entrada.
+- O cliente atualiza presença a cada três segundos. Após dois minutos sem atividade, a API remove o participante e tenta fechar suas faixas. Abas suspensas pelo sistema podem precisar entrar novamente.
+- Limite da aplicação: 16 participantes por sala, uma tela e uma faixa de áudio por participante. Não é um limite da Cloudflare.
+- Todas as operações de mídia exigem token. A API restringe publicação à sessão do solicitante e assinatura às faixas publicadas na mesma sala.
+- O segredo SFU e o token permanente TURN ficam somente no `.env` do servidor. Nunca use prefixo `VITE_` para eles. Não registre SDP nem cabeçalhos de autorização.
+- `/health` confirma que a API está ativa, mas não testa credenciais nem conectividade de mídia. Faça o teste entre dois clientes após configurar as credenciais.
 
-### Diagnóstico de conexão
+## TURN opcional
 
-- `POST /join` com status `200` confirma que o navegador alcançou a API de tokens.
-- WebSocket do LiveKit com status `101` confirma que o signaling atravessou o proxy ou Tunnel.
-- Os quadros ilegíveis mostrados pelo navegador são protobuf binário normal, não mojibake.
-- Se houver `101` e a sala cair logo depois, verifique os candidatos ICE, `use_external_ip`, firewall e redirecionamento das portas `7881/TCP`, `7882/UDP`, `3478/UDP` e `30000-30100/UDP`.
+`CLOUDFLARE_TURN_KEY_ID` e `CLOUDFLARE_TURN_API_TOKEN` habilitam credenciais temporárias para redes restritivas. Sem eles, o cliente usa STUN e conecta diretamente ao SFU. URLs TURN na porta 53 são descartadas. Um erro ao gerar credenciais impede a entrada em vez de omitir silenciosamente o relay configurado.
 
-O Caddy termina TLS para signaling e para a API. Os fluxos ICE/TURN continuam chegando diretamente ao LiveKit; não tente encaminhá-los por um proxy HTTP. Se o servidor usar NAT, valide o IP anunciado pelo LiveKit e as regras do firewall antes do teste externo.
+## Migração de uma instalação anterior
+
+Adicione as duas variáveis SFU ao `.env` existente e preserve URLs públicas e configurações TURN. Recompile e atualize a API, o web e o Electron juntos: o protocolo de sala mudou. Após validar vídeo e áudio em redes distintas, remova o contêiner antigo de mídia e suas regras de firewall/DNS. Não apague arquivos antigos de configuração ou segredos antes de concluir a validação e o plano de retorno.
+
+Referências: [API SFU](https://developers.cloudflare.com/realtime/sfu/https-api/), [sessões e faixas](https://developers.cloudflare.com/realtime/sfu/sessions-tracks/), [conexão](https://developers.cloudflare.com/realtime/sfu/connection/).
