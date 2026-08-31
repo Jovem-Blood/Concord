@@ -38,8 +38,8 @@ The synthetic stream reached `ended` after stop. No browser console errors or wa
 
 ## Remaining gaps
 
-- `design.pen` was neither parsed nor modified. Brand Foundations and Component Library could not be inspected or compared because no Pencil tool is exposed in this session.
-- `ConcordBrand.vue` currently renders only the wordmark. The old text C and purple favicon were removed; the selected SVG mark and matching favicon are pending. The required 24/32/48px mark inspection is therefore also pending.
+- `design.pen` was parsed directly to extract the selected B / Broken Orbit vector, but it was not modified. The wider Brand Foundations and Component Library still could not be visually inspected in Pencil because no Pencil tool is exposed in this session.
+- `ConcordBrand.vue` currently renders only the wordmark. The selected B / Broken Orbit mark is now used by the web favicon, packaged desktop app, and Windows installer; the generated icon includes 16/24/32/48/64/128/256px sizes.
 - Native Electron microphone permission, browser OS capture permissions, actual system audio and live remote SFU voice/DataChannel transmission need a runtime check. The project has no configured Cloudflare credentials in this workspace, so the required web ↔ web, Electron ↔ web and multi-participant live checks could not be run. Synthetic UI verification and service tests do not replace them.
 
-Provide Pencil access or exports of Brand Foundations, Component Library, and the selected SVG to finish the reference comparison and brand asset integration.
+Provide Pencil access to finish the wider Brand Foundations and Component Library reference comparison.

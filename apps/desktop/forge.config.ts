@@ -8,6 +8,8 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     executableName: 'Concord',
+    extraResource: ['assets/icon.png'],
+    icon: 'assets/icon',
     name: 'Concord',
     prune: false,
   },
@@ -16,6 +18,7 @@ const config: ForgeConfig = {
     new MakerSquirrel({
       name: 'concord',
       setupExe: 'Concord-Setup.exe',
+      setupIcon: 'assets/icon.ico',
     }),
     new MakerZIP({}, ['win32']),
   ],

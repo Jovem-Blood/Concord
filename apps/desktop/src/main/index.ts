@@ -24,6 +24,9 @@ function createMainWindow(): void {
     minWidth: 900,
     minHeight: 640,
     show: false,
+    icon: app.isPackaged
+      ? path.join(process.resourcesPath, 'icon.png')
+      : path.join(__dirname, '../../assets/icon.png'),
     backgroundColor: '#0b0d12',
     autoHideMenuBar: true,
     webPreferences: {
