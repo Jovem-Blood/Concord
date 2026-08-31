@@ -3,18 +3,26 @@ import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { CaptureProfile, CaptureSourceDTO } from '../shared/capture'
 import type { AppError } from '../shared/errors'
+import ConcordBrand from './components/ConcordBrand.vue'
+import CallControls from './components/CallControls.vue'
+import ChatPanel from './components/ChatPanel.vue'
 import MediaTile from './components/MediaTile.vue'
+import ParticipantList from './components/ParticipantList.vue'
+import RemoteVoiceAudio from './components/RemoteVoiceAudio.vue'
 import SourcePicker from './components/SourcePicker.vue'
+import { useVoice } from './composables/useVoice'
 import { stopMediaStream } from './domain/capture-cleanup'
 import { createRoomLink, roomCodeFromRoute } from './domain/room-link'
 import { generateRoomCode, isValidRoomCode, normalizeRoomCode } from './domain/room-code'
 import type { RoomState, ShareState } from './domain/state'
 import { captureProvider } from './services/capture/provider'
 import { CloudflareRoomService } from './services/cloudflare/room'
+import type { ChatSnapshot } from './services/chat'
 import type { ParticipantView, RemoteShareView } from './services/cloudflare/types'
 import { requestJoinToken } from './services/token'
 
 const roomService = new CloudflareRoomService()
+const voiceControls = useVoice(roomService)
 const route = useRoute()
 const router = useRouter()
 const displayName = ref(localStorage.getItem('displayName') ?? '')
@@ -30,6 +38,10 @@ const errorMessage = ref('')
 const shareNotice = ref('')
 const copied = ref(false)
 const focusedShareKey = ref('')
+const chatOpen = ref(false)
+const chat = ref<ChatSnapshot>({ messages: [], unread: 0, open: false, ready: false })
+const chatError = ref('')
+const chatPanel = ref<{ clearDraft(): void } | null>(null)
 let cleanupPromise: Promise<void> | null = null
 
 const captureEnvironment = captureProvider.capabilities.environment
@@ -58,16 +70,19 @@ watch(
 roomService.onSnapshot((snapshot) => {
   participants.value = snapshot.participants
   shares.value = snapshot.shares
+  voiceControls.remoteTracks.value = snapshot.remoteVoiceTracks
   if (focusedShareKey.value && !snapshot.shares.some((share) => share.key === focusedShareKey.value)) {
     focusedShareKey.value = ''
   }
 })
+roomService.onChat((snapshot) => { chat.value = snapshot })
 
 roomService.onConnection((state) => {
   roomState.value = state
   if (state === 'disconnected' && currentRoomCode.value) {
     errorMessage.value = 'A conexão com a sala foi encerrada.'
     void stopSharing()
+    voiceControls.reset()
   }
 })
 
@@ -110,6 +125,8 @@ function enterRoom(): void {
 async function leaveRoom(): Promise<void> {
   await stopSharing()
   await roomService.disconnect()
+  voiceControls.reset()
+  chatOpen.value = false
   currentRoomCode.value = ''
   roomState.value = 'idle'
   participants.value = []
@@ -117,6 +134,16 @@ async function leaveRoom(): Promise<void> {
   errorMessage.value = ''
   shareNotice.value = ''
   await router.replace('/')
+}
+function toggleChat(): void {
+  chatOpen.value = !chatOpen.value
+  roomService.setChatOpen(chatOpen.value)
+  if (chatOpen.value) chatError.value = ''
+}
+function sendChat(content: string): void {
+  chatError.value = ''
+  if (roomService.sendChat(content)) chatPanel.value?.clearDraft()
+  else chatError.value = 'A mensagem não foi enviada. Aguarde a conexão do chat e tente novamente.'
 }
 
 async function copyLink(): Promise<void> {
@@ -159,6 +186,9 @@ async function startSharing(
 
     if (includeSystemAudio && stream.getAudioTracks().length === 0 && captureEnvironment === 'web') {
       shareNotice.value = 'A tela está sendo transmitida sem áudio. O navegador ou a fonte escolhida não ofereceu áudio.'
+    }
+    if (includeSystemAudio && voiceControls.voice.value.joined) {
+      shareNotice.value = 'O áudio do sistema pode incluir a própria conversa da sala.'
     }
 
     if (localPreview.value) localPreview.value.srcObject = stream
@@ -221,6 +251,7 @@ function getErrorMessage(error: unknown): string {
 onBeforeUnmount(() => {
   void stopSharing()
   void roomService.disconnect()
+  voiceControls.reset()
 })
 </script>
 
@@ -229,22 +260,22 @@ onBeforeUnmount(() => {
     <section class="welcome-frame">
       <div class="welcome-intro">
         <div class="brand-lockup">
-          <div class="brand-mark">C</div>
-          <div><strong>Concord</strong><span>screen sharing privado</span></div>
+          <ConcordBrand />
+          <span>voz, chat e tela privados</span>
         </div>
         <div class="welcome-message">
           <p class="eyebrow">Direto ao ponto</p>
-          <h1>Mostre sua tela.<br />Continue a conversa.</h1>
-          <p>Uma sala leve para compartilhar janelas e monitores com seu grupo, sem contas ou configuração demorada.</p>
+          <h1>Mostre sua tela.<br /><span>Continue a conversa.</span></h1>
+          <p>Converse por voz, troque mensagens efêmeras e compartilhe sua tela, sem contas ou configuração demorada.</p>
         </div>
-        <div class="privacy-note"><span aria-hidden="true">✓</span> Acesso somente por código ou link</div>
+        <p class="privacy-note">Acesso somente por código ou link</p>
       </div>
 
       <section class="welcome-card" aria-labelledby="access-title">
         <header class="access-header">
           <p class="eyebrow">Acessar o Concord</p>
           <h2 id="access-title">{{ invitedRoomCode ? 'Seu convite está pronto' : 'Comece uma sala privada' }}</h2>
-          <p>{{ invitedRoomCode ? 'Informe seu nome para entrar.' : 'Dê um nome à sala começando pelo seu.' }}</p>
+          <p>{{ invitedRoomCode ? 'Informe seu nome para entrar.' : 'Informe seu nome para começar.' }}</p>
         </header>
 
         <div v-if="invitedRoomCode" class="invite-banner">
@@ -276,41 +307,35 @@ onBeforeUnmount(() => {
 
         <button v-if="invitedRoomCode" class="create-alternate" :disabled="!canSubmit" @click="createRoom">Prefiro criar uma nova sala</button>
 
-        <p v-if="roomState === 'joining'" class="status-note" aria-live="polite">Conectando à sala…</p>
-        <p v-if="errorMessage" class="error-banner" role="alert">{{ errorMessage }}</p>
+        <div class="access-feedback">
+          <p v-if="roomState === 'joining'" class="status-note" aria-live="polite">Conectando à sala…</p>
+          <p v-if="errorMessage" class="error-banner" role="alert">{{ errorMessage }}</p>
+        </div>
       </section>
     </section>
   </main>
 
-  <div v-else class="app-shell">
+  <div v-else class="app-shell" :inert="shareState === 'selecting'">
     <header class="topbar">
-      <div class="brand-inline"><span class="brand-mark small">C</span><strong>Concord</strong></div>
+      <ConcordBrand compact />
       <div class="room-context">
         <span>Sala privada</span>
-        <button class="room-code" :aria-label="copied ? 'Link copiado' : 'Copiar link da sala'" @click="copyLink">
-          <strong>{{ currentRoomCode }}</strong><small>{{ copied ? 'Copiado' : 'Copiar link' }}</small>
+        <button class="room-code" :data-copied="copied" :aria-label="copied ? 'Link copiado' : `Copiar link da sala ${currentRoomCode}`" @click="copyLink">
+          <strong>{{ currentRoomCode }}</strong><small aria-live="polite">{{ copied ? 'Copiado' : 'Copiar link' }}</small>
         </button>
       </div>
-      <div class="connection-state" :data-state="roomState"><span />{{ statusLabel }}</div>
+      <div class="connection-state" :data-state="roomState" role="status"><span aria-hidden="true" />{{ statusLabel }}</div>
     </header>
 
-    <div class="workspace">
+    <div class="workspace" :class="{ 'chat-open': chatOpen }">
       <aside class="sidebar">
         <div class="sidebar-room">
           <span class="sidebar-kicker">Nesta sala</span>
           <strong>{{ currentRoomCode }}</strong>
           <small>Compartilhamento protegido pelo link</small>
         </div>
-        <div class="sidebar-heading">
-          <h2>Participantes</h2><span>{{ participants.length }}</span>
-        </div>
-        <ul class="participant-list">
-          <li v-for="participant in participants" :key="participant.identity">
-            <span class="avatar">{{ participant.name.slice(0, 1).toUpperCase() }}</span>
-            <span><strong>{{ participant.name }}</strong><small>{{ participant.isLocal ? 'Você' : 'Conectado' }}</small></span>
-          </li>
-        </ul>
-        <button class="leave-button" @click="leaveRoom">Sair da sala</button>
+        <ParticipantList :participants="participants" :voice="voiceControls.voice.value" :speaking="voiceControls.speaking.value" :status="statusLabel" />
+        <p class="sidebar-help">Ative o microfone somente quando quiser falar. Você pode ouvir a sala sem conceder permissão.</p>
       </aside>
 
       <section class="stage">
@@ -323,25 +348,30 @@ onBeforeUnmount(() => {
         </header>
 
         <div class="stage-canvas">
-          <div v-if="errorMessage" class="error-banner stage-error" role="alert">{{ errorMessage }}<button aria-label="Fechar erro" @click="errorMessage = ''">×</button></div>
-          <div v-if="shareNotice" class="notice-banner stage-notice">{{ shareNotice }}<button aria-label="Fechar aviso" @click="shareNotice = ''">×</button></div>
+          <div v-if="errorMessage || shareNotice" class="stage-banners">
+            <div v-if="errorMessage" class="error-banner stage-error" role="alert"><span>{{ errorMessage }}</span><button aria-label="Fechar erro" @click="errorMessage = ''">×</button></div>
+            <div v-if="shareNotice" class="notice-banner stage-notice" role="status"><span>{{ shareNotice }}</span><button aria-label="Fechar aviso" @click="shareNotice = ''">×</button></div>
+            <div v-if="voiceControls.notice.value" class="notice-banner stage-notice" role="status"><span>{{ voiceControls.notice.value }}</span><button aria-label="Fechar aviso" @click="voiceControls.notice.value = ''">×</button></div>
+          </div>
+          <RemoteVoiceAudio :voices="voiceControls.remoteTracks.value" :deafened="voiceControls.voice.value.deafened" @click="voiceControls.resumeAudio" />
 
           <div v-if="shares.length === 0 && !localStream" class="empty-stage">
-            <div class="empty-illustration" aria-hidden="true"><span /><span /></div>
+            <p class="eyebrow">Nenhuma transmissão</p>
             <h2>O palco está livre</h2>
             <p>Compartilhe uma janela ou monitor quando estiver pronto.</p>
             <button class="button primary" :disabled="shareState !== 'idle'" @click="openPicker">Compartilhar minha tela</button>
           </div>
 
-          <div v-else class="media-grid" :class="{ 'has-focus': focusedShareKey }">
+          <div v-else class="media-grid" :class="{ 'has-focus': focusedShareKey, 'single-share': shares.length + (localStream ? 1 : 0) === 1 }">
             <article v-if="localStream" class="media-tile local" :class="{ hidden: focusedShareKey }">
-              <video ref="localPreview" autoplay playsinline muted :srcObject="localStream" />
-              <footer><span class="live-dot" />Sua tela <span class="audio-badge">Prévia local</span></footer>
+              <video ref="localPreview" autoplay playsinline muted :srcObject="localStream" aria-label="Prévia da sua tela" />
+              <footer><span class="live-label"><span class="live-dot" aria-hidden="true" />{{ shareState === 'sharing' ? 'Ao vivo' : 'Iniciando…' }}</span><strong>Sua tela</strong><span class="audio-badge">Prévia local · {{ localStream.getAudioTracks().length ? 'Com áudio' : 'Sem áudio' }}</span></footer>
             </article>
             <MediaTile
               v-for="share in shares"
               :key="share.key"
               :share="share"
+              :deafened="voiceControls.voice.value.deafened"
               :focused="focusedShareKey === share.key"
               :class="{ hidden: focusedShareKey && focusedShareKey !== share.key }"
               @focus="focusedShareKey = focusedShareKey === share.key ? '' : share.key"
@@ -349,18 +379,16 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <footer class="stage-actions">
-          <span>{{ shareState === 'sharing' ? 'Sua tela está visível para a sala' : 'Áudio do sistema é opcional' }}</span>
-          <button v-if="shareState === 'sharing' || shareState === 'stopping'" class="button danger" :disabled="shareState === 'stopping'" @click="stopSharing">
-            {{ shareState === 'stopping' ? 'Parando…' : 'Parar transmissão' }}
-          </button>
-          <button v-else class="button primary" :disabled="shareState !== 'idle'" @click="openPicker">
-            {{ shareState === 'starting' ? 'Iniciando…' : 'Compartilhar tela' }}
-          </button>
-        </footer>
+        <CallControls
+          :voice="voiceControls.voice.value" :voice-busy="voiceControls.busy.value" :share-state="shareState"
+          :connected="roomState === 'connected'" :chat-open="chatOpen" :unread="chat.unread"
+          @microphone="voiceControls.toggleMicrophone" @deafen="voiceControls.toggleDeafen" @share="openPicker"
+          @stop-share="stopSharing" @chat="toggleChat" @leave="leaveRoom"
+        />
       </section>
+      <ChatPanel v-if="chatOpen" ref="chatPanel" :chat="chat" :error="chatError" @close="toggleChat" @send="sendChat" />
     </div>
   </div>
 
-  <SourcePicker v-if="shareState === 'selecting'" @cancel="cancelPicker" @share="startSharing" />
+  <SourcePicker v-if="shareState === 'selecting'" :voice-active="voiceControls.voice.value.joined" @cancel="cancelPicker" @share="startSharing" />
 </template>

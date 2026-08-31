@@ -1,0 +1,1989 @@
+{
+  "version": "2.17",
+  "children": [
+    {
+      "type": "frame",
+      "id": "aL4BD",
+      "x": 1520,
+      "y": 1050,
+      "name": "Button Primary",
+      "reusable": true,
+      "width": 190,
+      "height": 44,
+      "fill": "$accent",
+      "cornerRadius": "$radius-sm",
+      "gap": 9,
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "icon",
+          "id": "oWvm2",
+          "name": "Primary Button Icon",
+          "width": 18,
+          "height": 18,
+          "icon": "screen-share",
+          "library": "lucide",
+          "fill": "$accent-ink"
+        },
+        {
+          "type": "text",
+          "id": "A9Mfq",
+          "name": "Primary Button Label",
+          "fill": "$accent-ink",
+          "content": "Share screen",
+          "fontFamily": "$font-ui",
+          "fontSize": 13,
+          "fontWeight": "650"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "lEOCG",
+      "x": 1726,
+      "y": 1050,
+      "name": "Button Secondary",
+      "reusable": true,
+      "width": 142,
+      "height": 44,
+      "fill": "$surface-raised",
+      "cornerRadius": "$radius-sm",
+      "stroke": "$border",
+      "strokeWidth": 1,
+      "gap": 9,
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "icon",
+          "id": "FzYOh",
+          "name": "Secondary Button Icon",
+          "width": 17,
+          "height": 17,
+          "icon": "log-in",
+          "library": "lucide",
+          "fill": "$text-soft"
+        },
+        {
+          "type": "text",
+          "id": "N6TuMz",
+          "name": "Secondary Button Label",
+          "fill": "$text",
+          "content": "Join room",
+          "fontFamily": "$font-ui",
+          "fontSize": 13,
+          "fontWeight": "600"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "OwSXm",
+      "x": 1884,
+      "y": 1050,
+      "name": "Button Danger",
+      "reusable": true,
+      "width": 156,
+      "height": 44,
+      "fill": "#2B171A",
+      "cornerRadius": "$radius-sm",
+      "stroke": "#5A292F",
+      "strokeWidth": 1,
+      "gap": 9,
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "icon",
+          "id": "P43VRL",
+          "name": "Danger Button Icon",
+          "width": 16,
+          "height": 16,
+          "icon": "square",
+          "library": "lucide",
+          "fill": "$danger"
+        },
+        {
+          "type": "text",
+          "id": "Q3nmVX",
+          "name": "Danger Button Label",
+          "fill": "#FFB8BC",
+          "content": "Stop sharing",
+          "fontFamily": "$font-ui",
+          "fontSize": 13,
+          "fontWeight": "600"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "v6qU1",
+      "x": 2056,
+      "y": 1050,
+      "name": "Icon Button",
+      "reusable": true,
+      "width": 44,
+      "height": 44,
+      "fill": "$surface-raised",
+      "cornerRadius": "$radius-sm",
+      "stroke": "$border",
+      "strokeWidth": 1,
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "icon",
+          "id": "uZ0Vs",
+          "name": "Icon Button Glyph",
+          "width": 18,
+          "height": 18,
+          "icon": "copy",
+          "library": "lucide",
+          "fill": "$text-soft"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "LXFA1",
+      "x": 1520,
+      "y": 1120,
+      "name": "Participant Row",
+      "reusable": true,
+      "width": 280,
+      "height": 58,
+      "fill": "$surface",
+      "cornerRadius": "$radius-sm",
+      "gap": 12,
+      "padding": [
+        8,
+        10
+      ],
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "uVZEv",
+          "name": "Participant Avatar",
+          "width": 38,
+          "height": 38,
+          "fill": "$accent-soft",
+          "cornerRadius": 10,
+          "stroke": "#5B4C18",
+          "strokeWidth": 1,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "PORSd",
+              "name": "Participant Initial",
+              "fill": "$accent",
+              "content": "L",
+              "fontFamily": "$font-ui",
+              "fontSize": 13,
+              "fontWeight": "700"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "iQ44y",
+          "name": "Participant Copy",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 3,
+          "children": [
+            {
+              "type": "text",
+              "id": "xULUe",
+              "name": "Participant Name",
+              "fill": "$text",
+              "content": "Luís",
+              "fontFamily": "$font-ui",
+              "fontSize": 13,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "SMsiH",
+              "name": "Participant Status",
+              "fill": "$text-muted",
+              "content": "You · connected",
+              "fontFamily": "$font-ui",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "ellipse",
+          "id": "a4daS",
+          "name": "Participant Presence",
+          "fill": "$success",
+          "width": 8,
+          "height": 8
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "D0YVQ",
+      "x": 1820,
+      "y": 1120,
+      "name": "Source Card",
+      "reusable": true,
+      "width": 304,
+      "height": 238,
+      "fill": "$surface",
+      "cornerRadius": "$radius-md",
+      "stroke": "$border",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "gap": 12,
+      "padding": 10,
+      "children": [
+        {
+          "type": "frame",
+          "id": "v1uHCg",
+          "name": "Source Preview",
+          "width": "fill_container",
+          "height": 164,
+          "fill": "$surface-soft",
+          "cornerRadius": 8,
+          "layout": "vertical",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon",
+              "id": "DrFZ2",
+              "name": "Source Preview Icon",
+              "width": 38,
+              "height": 38,
+              "icon": "monitor",
+              "library": "lucide",
+              "fill": "$text-muted"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "iv5Hr",
+          "name": "Source Meta",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "M0ERo",
+              "name": "Source Name",
+              "fill": "$text",
+              "content": "Display 1",
+              "fontFamily": "$font-ui",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "KgBex",
+              "name": "Source Kind",
+              "fill": "$text-muted",
+              "content": "MONITOR",
+              "fontFamily": "$font-mono",
+              "fontSize": 9,
+              "fontWeight": "600",
+              "letterSpacing": 0.8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "CU6Ck",
+      "x": 2144,
+      "y": 1120,
+      "name": "Room Code Control",
+      "reusable": true,
+      "width": 260,
+      "height": 44,
+      "fill": "$surface-raised",
+      "cornerRadius": "$radius-sm",
+      "stroke": "$border",
+      "strokeWidth": 1,
+      "gap": 12,
+      "padding": [
+        0,
+        12
+      ],
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "text",
+          "id": "RMTrB",
+          "name": "Room Code Value",
+          "fill": "$text",
+          "content": "MICA-72QH",
+          "fontFamily": "$font-mono",
+          "fontSize": 12,
+          "fontWeight": "650",
+          "letterSpacing": 1.4
+        },
+        {
+          "type": "rectangle",
+          "id": "bpdwX",
+          "name": "Room Code Divider",
+          "fill": "$border",
+          "width": 1,
+          "height": 18
+        },
+        {
+          "type": "text",
+          "id": "bjIOr",
+          "name": "Room Code Action",
+          "fill": "$accent",
+          "content": "Copy link",
+          "fontFamily": "$font-ui",
+          "fontSize": 10,
+          "fontWeight": "600"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "d7adU4",
+      "x": 1520,
+      "y": 0,
+      "name": "Component Library",
+      "width": 1440,
+      "height": 980,
+      "fill": "$bg",
+      "layout": "vertical",
+      "gap": 32,
+      "padding": [
+        52,
+        56
+      ],
+      "justifyContent": "space_between",
+      "children": [
+        {
+          "type": "frame",
+          "id": "Acv5e",
+          "name": "Component Library Header",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "alignItems": "end",
+          "children": [
+            {
+              "type": "frame",
+              "id": "FPXd0",
+              "name": "Component Library Header Copy",
+              "layout": "vertical",
+              "gap": 8,
+              "justifyContent": "space_between",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "qOsC3",
+                  "name": "Component Library Eyebrow",
+                  "fill": "$accent",
+                  "content": "CONCORD / CORE UI",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 11,
+                  "fontWeight": "600",
+                  "letterSpacing": 1.4
+                },
+                {
+                  "type": "text",
+                  "id": "C7j0k",
+                  "name": "Component Library Title",
+                  "fill": "$text",
+                  "content": "Quiet controls, clear states.",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 34,
+                  "fontWeight": "650",
+                  "letterSpacing": -1.2
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "Ew3b3",
+              "name": "Component Library Note",
+              "fill": "$text-muted",
+              "content": "44px targets · 8–16px radius · single warm accent",
+              "fontFamily": "$font-mono",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "BQqLr",
+          "name": "Actions Section",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 14,
+          "justifyContent": "space_between",
+          "children": [
+            {
+              "type": "text",
+              "id": "myC7u",
+              "name": "Actions Section Label",
+              "fill": "$text-muted",
+              "content": "ACTIONS",
+              "fontFamily": "$font-mono",
+              "fontSize": 10,
+              "fontWeight": "600",
+              "letterSpacing": 1.2
+            },
+            {
+              "type": "frame",
+              "id": "WtKym",
+              "name": "Action Components",
+              "width": "fill_container",
+              "height": 44,
+              "gap": 16,
+              "justifyContent": "space_between",
+              "children": [
+                {
+                  "id": "b1DtI",
+                  "type": "ref",
+                  "ref": "aL4BD",
+                  "name": "Primary Button Example"
+                },
+                {
+                  "id": "phbpQ",
+                  "type": "ref",
+                  "ref": "lEOCG",
+                  "name": "Secondary Button Example"
+                },
+                {
+                  "id": "tF3QE",
+                  "type": "ref",
+                  "ref": "OwSXm",
+                  "name": "Danger Button Example"
+                },
+                {
+                  "id": "d5Y0q",
+                  "type": "ref",
+                  "ref": "v6qU1",
+                  "name": "Icon Button Example"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "jYEZH",
+          "name": "Room Entities Section",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 14,
+          "justifyContent": "space_between",
+          "children": [
+            {
+              "type": "text",
+              "id": "dMg3G",
+              "name": "Room Entities Label",
+              "fill": "$text-muted",
+              "content": "ROOM ENTITIES",
+              "fontFamily": "$font-mono",
+              "fontSize": 10,
+              "fontWeight": "600",
+              "letterSpacing": 1.2
+            },
+            {
+              "type": "frame",
+              "id": "j5VP1",
+              "name": "Room Entity Components",
+              "width": "fill_container",
+              "height": 258,
+              "gap": 20,
+              "justifyContent": "space_between",
+              "children": [
+                {
+                  "id": "xQzv5",
+                  "type": "ref",
+                  "ref": "LXFA1",
+                  "name": "Participant Row Example"
+                },
+                {
+                  "id": "KdOEB",
+                  "type": "ref",
+                  "ref": "D0YVQ",
+                  "name": "Source Card Example"
+                },
+                {
+                  "id": "I3UAZ",
+                  "type": "ref",
+                  "ref": "CU6Ck",
+                  "name": "Room Code Example"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "IUrU2",
+          "name": "Status Language Section",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 14,
+          "justifyContent": "space_between",
+          "children": [
+            {
+              "type": "text",
+              "id": "rh3mO",
+              "name": "Status Language Label",
+              "fill": "$text-muted",
+              "content": "STATUS LANGUAGE",
+              "fontFamily": "$font-mono",
+              "fontSize": 10,
+              "fontWeight": "600",
+              "letterSpacing": 1.2
+            },
+            {
+              "type": "frame",
+              "id": "qTQvv",
+              "name": "Status Components",
+              "width": "fill_container",
+              "gap": 12,
+              "justifyContent": "space_between",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "y7yzG",
+                  "name": "Connected Status",
+                  "fill": "#13241C",
+                  "cornerRadius": 999,
+                  "gap": 7,
+                  "padding": [
+                    7,
+                    10
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "V9pwW",
+                      "name": "Connected Status Dot",
+                      "fill": "$success",
+                      "width": 7,
+                      "height": 7
+                    },
+                    {
+                      "type": "text",
+                      "id": "trUWk",
+                      "name": "Connected Status Label",
+                      "fill": "#8DE2B3",
+                      "content": "Connected",
+                      "fontFamily": "$font-ui",
+                      "fontSize": 10,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "e6XpPo",
+                  "name": "Sharing Status",
+                  "fill": "#2A2413",
+                  "cornerRadius": 999,
+                  "gap": 7,
+                  "padding": [
+                    7,
+                    10
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "FqbvS",
+                      "name": "Sharing Status Dot",
+                      "fill": "$accent",
+                      "width": 7,
+                      "height": 7
+                    },
+                    {
+                      "type": "text",
+                      "id": "S6OK8j",
+                      "name": "Sharing Status Label",
+                      "fill": "$accent",
+                      "content": "Sharing",
+                      "fontFamily": "$font-ui",
+                      "fontSize": 10,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "YuDXT",
+                  "name": "Reconnecting Status",
+                  "fill": "#2C2115",
+                  "cornerRadius": 999,
+                  "gap": 7,
+                  "padding": [
+                    7,
+                    10
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "vTDA8",
+                      "name": "Reconnecting Status Dot",
+                      "fill": "#E49B42",
+                      "width": 7,
+                      "height": 7
+                    },
+                    {
+                      "type": "text",
+                      "id": "dfSPn",
+                      "name": "Reconnecting Status Label",
+                      "fill": "#F0B766",
+                      "content": "Reconnecting",
+                      "fontFamily": "$font-ui",
+                      "fontSize": 10,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "EaUXU",
+                  "name": "Private Status",
+                  "fill": "$surface-soft",
+                  "cornerRadius": 999,
+                  "gap": 7,
+                  "padding": [
+                    7,
+                    10
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "ueGG7",
+                      "name": "Private Status Dot",
+                      "fill": "$text-muted",
+                      "width": 7,
+                      "height": 7
+                    },
+                    {
+                      "type": "text",
+                      "id": "rR27J",
+                      "name": "Private Status Label",
+                      "fill": "$text-soft",
+                      "content": "Private",
+                      "fontFamily": "$font-ui",
+                      "fontSize": 10,
+                      "fontWeight": "600"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "VRv5Y",
+      "x": 0,
+      "y": 0,
+      "name": "Brand Foundations",
+      "width": 1440,
+      "height": 980,
+      "fill": "$bg",
+      "layout": "vertical",
+      "gap": 38,
+      "padding": [
+        52,
+        56
+      ],
+      "justifyContent": "space_between",
+      "children": [
+        {
+          "type": "frame",
+          "id": "K7MIF",
+          "name": "Brand Header",
+          "width": "fill_container",
+          "height": 230,
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "WTKuf",
+              "name": "Primary Lockup",
+              "width": 700,
+              "gap": 24,
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "uRwA6",
+                  "name": "Concord Brand Mark",
+                  "clip": true,
+                  "width": 128,
+                  "height": 128,
+                  "fill": "$accent",
+                  "cornerRadius": 30,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "id": "YvwNP",
+                      "x": 0,
+                      "y": 23.6883,
+                      "fill": "#FFCD41",
+                      "width": 128,
+                      "height": 80.6234
+                    },
+                    {
+                      "type": "path",
+                      "id": "UhrU1",
+                      "x": 9.4753,
+                      "y": 33.2468,
+                      "geometry": "M96.99741 0l-84.94546 0c-6.23377 0-12.05195 5.07013-12.05195 11.8026l0 37.31948c0 6.31688 4.73766 12.38441 12.13506 12.38442l84.77922 0c6.81559 0 12.05195-5.23637 12.05195-12.05196l0-37.65194c0-6.4-4.82078-11.8026-11.96882-11.8026z m-28.17663 20.69611l-12.88312 0.08311 0 19.78182 12.63376 0 0.24936 8.14545c0 5.90129-5.23637 11.71948-12.63377 12.55065l-3.65714 0c-6.23376-0.16623-12.05195-4.90389-12.21818-12.3013l0-12.3013 5.98441-4.07273c0.74806-0.58182 1.08052-1.32987 1.16364-1.91168-0.08311-0.74805-0.66494-1.49611-0.91428-1.74546l-6.15065-4.07272 0-12.55065c0.24935-6.48312 6.15065-12.21818 12.21817-12.21818l4.32209 0c5.48571 0.4987 11.55325 4.73766 11.88571 11.88571l0 8.72728z",
+                      "width": 108.9662,
+                      "height": 61.5065,
+                      "stroke": "#262628",
+                      "strokeWidth": 3.7402597402597406
+                    },
+                    {
+                      "type": "path",
+                      "id": "ozmhe",
+                      "x": 61.5065,
+                      "y": 61.839,
+                      "geometry": "M0 0c1.16364 2.49351 1.08052 2.65974 0 5.07013l3.24156 0",
+                      "width": 3.2416,
+                      "height": 5.0701,
+                      "stroke": "#262628",
+                      "strokeWidth": 3.7402597402597406
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "pS6oN",
+                  "name": "Brand Wordmark Copy",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "dUJ7t",
+                      "name": "Concord Wordmark",
+                      "fill": "$text",
+                      "content": "Concord",
+                      "fontFamily": "$font-ui",
+                      "fontSize": 52,
+                      "fontWeight": "650",
+                      "letterSpacing": -2.2
+                    },
+                    {
+                      "type": "text",
+                      "id": "mcppn",
+                      "name": "Brand Descriptor",
+                      "fill": "$accent",
+                      "content": "PRIVATE SCREEN SHARING",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 12,
+                      "fontWeight": "600",
+                      "letterSpacing": 1.7
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "zJ7kb",
+              "name": "Brand Statement",
+              "width": 460,
+              "layout": "vertical",
+              "gap": 10,
+              "justifyContent": "space_between",
+              "alignItems": "end",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Sz4qI",
+                  "name": "Brand Eyebrow",
+                  "fill": "$text-muted",
+                  "content": "THE QUIET COUNTERPOINT",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 11,
+                  "fontWeight": "600",
+                  "letterSpacing": 1.5
+                },
+                {
+                  "type": "text",
+                  "id": "wNDFk",
+                  "name": "Brand Promise",
+                  "fill": "$text",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "A private room to show your screen and stay in the conversation.",
+                  "lineHeight": 1.25,
+                  "textAlign": "right",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 26,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "fW5YM",
+          "name": "Foundation Modules",
+          "width": "fill_container",
+          "height": 570,
+          "gap": 24,
+          "justifyContent": "space_between",
+          "children": [
+            {
+              "type": "frame",
+              "id": "x8mFI",
+              "name": "Color System",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "$surface",
+              "cornerRadius": "$radius-lg",
+              "stroke": "$border",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 20,
+              "padding": 24,
+              "justifyContent": "space_between",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "rrdo5",
+                  "name": "Color System Title",
+                  "fill": "$text",
+                  "content": "Color system",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 18,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "ewEJz",
+                  "name": "Core Swatches",
+                  "width": "fill_container",
+                  "height": 150,
+                  "gap": 10,
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "lXjNF",
+                      "name": "Night Swatch",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$bg",
+                      "cornerRadius": "$radius-md",
+                      "stroke": "#FFFFFF12",
+                      "strokeWidth": 1,
+                      "layout": "vertical",
+                      "padding": 14,
+                      "justifyContent": "space_between",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "U1eOk",
+                          "name": "Night Swatch Name",
+                          "fill": "$text",
+                          "content": "Night",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "rVNFR",
+                          "name": "Night Swatch Value",
+                          "fill": "$text-muted",
+                          "content": "#0B0D10",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 9,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "tw63q",
+                      "name": "Room Swatch",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$surface-raised",
+                      "cornerRadius": "$radius-md",
+                      "stroke": "#FFFFFF12",
+                      "strokeWidth": 1,
+                      "layout": "vertical",
+                      "padding": 14,
+                      "justifyContent": "space_between",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ock05",
+                          "name": "Room Swatch Name",
+                          "fill": "$text",
+                          "content": "Room",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "al9ZQ",
+                          "name": "Room Swatch Value",
+                          "fill": "$text-muted",
+                          "content": "#191D24",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 9,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "yEomz",
+                      "name": "Signal Swatch",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$accent",
+                      "cornerRadius": "$radius-md",
+                      "stroke": "#FFFFFF12",
+                      "strokeWidth": 1,
+                      "layout": "vertical",
+                      "padding": 14,
+                      "justifyContent": "space_between",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "kf0Oz",
+                          "name": "Signal Swatch Name",
+                          "fill": "$accent-ink",
+                          "content": "Signal",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "D9GEqk",
+                          "name": "Signal Swatch Value",
+                          "fill": "#4B3C0E",
+                          "content": "#F4C84A",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 9,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "DnED5",
+                      "name": "Type Swatch",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": "$radius-md",
+                      "stroke": "$border",
+                      "strokeWidth": 1,
+                      "layout": "vertical",
+                      "padding": 14,
+                      "justifyContent": "space_between",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Oprgh",
+                          "name": "Type Swatch Name",
+                          "fill": "$accent-ink",
+                          "content": "Type",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "mZYFA",
+                          "name": "Type Swatch Value",
+                          "fill": "#4B3C0E",
+                          "content": "#F7F7F4",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 9,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "LcxZX",
+                  "name": "Palette Note",
+                  "fill": "$text-soft",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "The inversion is perceptual, not literal: warm signal yellow replaces blurple while the room stays calm, matte and technical.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font-ui",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "b9nLj",
+              "name": "Typography and Voice",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "$surface",
+              "cornerRadius": "$radius-lg",
+              "stroke": "$border",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 18,
+              "padding": 24,
+              "justifyContent": "space_between",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ebGvu",
+                  "name": "Typography Title",
+                  "fill": "$text",
+                  "content": "Typography & voice",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 18,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "jQuIc",
+                  "name": "Type Specimen Heading",
+                  "fill": "$text",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Show your screen.\nKeep the conversation.",
+                  "lineHeight": 1.08,
+                  "fontFamily": "$font-ui",
+                  "fontSize": 32,
+                  "fontWeight": "650",
+                  "letterSpacing": -1.1
+                },
+                {
+                  "type": "text",
+                  "id": "ARSNU",
+                  "name": "Type Specimen Body",
+                  "fill": "$text-soft",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Geist keeps controls precise and conversation friendly. Geist Mono is reserved for room codes, status and technical labels.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font-ui",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "X29Op",
+                  "name": "Voice Tags",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Q6buV",
+                      "name": "CALM Voice Tag",
+                      "fill": "$surface-soft",
+                      "cornerRadius": 6,
+                      "padding": [
+                        7,
+                        10
+                      ],
+                      "justifyContent": "space_between",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "dpmcY",
+                          "name": "CALM Tag Label",
+                          "fill": "$text-muted",
+                          "content": "CALM",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 9,
+                          "fontWeight": "600",
+                          "letterSpacing": 1
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Frur9",
+                      "name": "DIRECT Voice Tag",
+                      "fill": "$surface-soft",
+                      "cornerRadius": 6,
+                      "padding": [
+                        7,
+                        10
+                      ],
+                      "justifyContent": "space_between",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "jiKT5",
+                          "name": "DIRECT Tag Label",
+                          "fill": "$text-muted",
+                          "content": "DIRECT",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 9,
+                          "fontWeight": "600",
+                          "letterSpacing": 1
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "N4lMky",
+                      "name": "PRIVATE Voice Tag",
+                      "fill": "$surface-soft",
+                      "cornerRadius": 6,
+                      "padding": [
+                        7,
+                        10
+                      ],
+                      "justifyContent": "space_between",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "r2ujk",
+                          "name": "PRIVATE Tag Label",
+                          "fill": "$text-muted",
+                          "content": "PRIVATE",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 9,
+                          "fontWeight": "600",
+                          "letterSpacing": 1
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "frrJU",
+                      "name": "CLEAR Voice Tag",
+                      "fill": "$surface-soft",
+                      "cornerRadius": 6,
+                      "padding": [
+                        7,
+                        10
+                      ],
+                      "justifyContent": "space_between",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "zbKNd",
+                          "name": "CLEAR Tag Label",
+                          "fill": "$text-muted",
+                          "content": "CLEAR",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 9,
+                          "fontWeight": "600",
+                          "letterSpacing": 1
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "jp311",
+              "name": "Identity Principles",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "$surface",
+              "cornerRadius": "$radius-lg",
+              "stroke": "$border",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 16,
+              "padding": 24,
+              "justifyContent": "space_between",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "MLVuN",
+                  "name": "Identity Principles Title",
+                  "fill": "$text",
+                  "content": "Identity rules",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 18,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "ahsPp",
+                  "name": "Principle 1",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ea2A2",
+                      "name": "Principle 1 Number",
+                      "width": 28,
+                      "height": 28,
+                      "fill": "$accent-soft",
+                      "cornerRadius": 7,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "m1mTYR",
+                          "name": "Principle 1 Numeral",
+                          "fill": "$accent",
+                          "content": "1",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 10,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "c1881b",
+                      "name": "Principle 1 Copy",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "justifyContent": "space_between",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Ue5zm",
+                          "name": "Principle 1 Heading",
+                          "fill": "$text",
+                          "content": "One signal color",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "vxwkb",
+                          "name": "Principle 1 Detail",
+                          "fill": "$text-muted",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Citrine marks action, focus and live state.",
+                          "lineHeight": 1.4,
+                          "fontFamily": "$font-ui",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "nAUof",
+                  "name": "Principle 2",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "nSR4B",
+                      "name": "Principle 2 Number",
+                      "width": 28,
+                      "height": 28,
+                      "fill": "$accent-soft",
+                      "cornerRadius": 7,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "lwigT",
+                          "name": "Principle 2 Numeral",
+                          "fill": "$accent",
+                          "content": "2",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 10,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Knr8r",
+                      "name": "Principle 2 Copy",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "justifyContent": "space_between",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "V0hKOE",
+                          "name": "Principle 2 Heading",
+                          "fill": "$text",
+                          "content": "Stage first",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "xVlue",
+                          "name": "Principle 2 Detail",
+                          "fill": "$text-muted",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Video owns the dominant region.",
+                          "lineHeight": 1.4,
+                          "fontFamily": "$font-ui",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "D6SG4",
+                  "name": "Principle 3",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "i64CPy",
+                      "name": "Principle 3 Number",
+                      "width": 28,
+                      "height": 28,
+                      "fill": "$accent-soft",
+                      "cornerRadius": 7,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "uwSqh",
+                          "name": "Principle 3 Numeral",
+                          "fill": "$accent",
+                          "content": "3",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 10,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Oi5OJ",
+                      "name": "Principle 3 Copy",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "justifyContent": "space_between",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Ne3YK",
+                          "name": "Principle 3 Heading",
+                          "fill": "$text",
+                          "content": "Useful softness",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "JRcCl",
+                          "name": "Principle 3 Detail",
+                          "fill": "$text-muted",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Rounded enough to feel human, never bubbly.",
+                          "lineHeight": 1.4,
+                          "fontFamily": "$font-ui",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "MJljU",
+                  "name": "Principle 4",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "cbfxO",
+                      "name": "Principle 4 Number",
+                      "width": 28,
+                      "height": 28,
+                      "fill": "$accent-soft",
+                      "cornerRadius": 7,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "wBB0e",
+                          "name": "Principle 4 Numeral",
+                          "fill": "$accent",
+                          "content": "4",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 10,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "uJPic",
+                      "name": "Principle 4 Copy",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "justifyContent": "space_between",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "seXy4",
+                          "name": "Principle 4 Heading",
+                          "fill": "$text",
+                          "content": "No gamer costume",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "F4WljL",
+                          "name": "Principle 4 Detail",
+                          "fill": "$text-muted",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "No mascot, neon purple or ornamental chrome.",
+                          "lineHeight": 1.4,
+                          "fontFamily": "$font-ui",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "l7HJY8",
+      "x": 0,
+      "y": 1060,
+      "name": "Logo Mark Explorations",
+      "clip": true,
+      "width": 1440,
+      "height": 700,
+      "fill": "$bg",
+      "layout": "vertical",
+      "gap": 40,
+      "padding": 56,
+      "children": [
+        {
+          "type": "frame",
+          "id": "t9Bma5",
+          "name": "Exploration Header",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 10,
+          "children": [
+            {
+              "type": "text",
+              "id": "y9YIf",
+              "name": "Exploration Eyebrow",
+              "fill": "$accent",
+              "content": "CONCORD / BRAND MARK STUDY",
+              "fontFamily": "$font-mono",
+              "fontSize": 12,
+              "fontWeight": "600",
+              "letterSpacing": 1.2
+            },
+            {
+              "type": "text",
+              "id": "WGIAG",
+              "name": "Exploration Title",
+              "fill": "$text",
+              "content": "Three signals for an anti-Discord voice.",
+              "fontFamily": "$font-ui",
+              "fontSize": 34,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "tlnZM",
+              "name": "Exploration Description",
+              "fill": "$text-soft",
+              "textGrowth": "fixed-width",
+              "width": 760,
+              "content": "Compact, defiant, and legible at app-icon scale. Each direction keeps the warm signal yellow and hard-edged night surfaces.",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-ui",
+              "fontSize": 15,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "h7NQ2m",
+          "name": "Logo Alternatives",
+          "width": "fill_container",
+          "height": "fill_container",
+          "gap": 24,
+          "children": [
+            {
+              "type": "frame",
+              "id": "KYjVa",
+              "name": "Classic Joystick Direction",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "$surface",
+              "cornerRadius": "$radius-md",
+              "stroke": "$border",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 18,
+              "padding": 24,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "e2jqxh",
+                  "name": "Classic Joystick Label",
+                  "fill": "$accent",
+                  "content": "A / JOYSTICK",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 11,
+                  "fontWeight": "600",
+                  "letterSpacing": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "pOqNR",
+                  "name": "Classic Joystick Stage",
+                  "width": "fill_container",
+                  "height": 260,
+                  "fill": "$surface-raised",
+                  "cornerRadius": "$radius-sm",
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "cktlL",
+                      "name": "Classic Joystick Mark",
+                      "clip": true,
+                      "width": 180,
+                      "height": 180,
+                      "layout": "none",
+                      "children": [
+                        {
+                          "type": "rectangle",
+                          "id": "i8RlI",
+                          "x": 6.9742,
+                          "y": 0,
+                          "fill": "#FFC32E",
+                          "width": 166.0517,
+                          "height": 179.8339
+                        },
+                        {
+                          "type": "path",
+                          "id": "qPMuc",
+                          "x": 17.9336,
+                          "y": 91.8266,
+                          "geometry": "M118.39484 1.66051l-29.72326-1.49446-27.73062-0.16605-35.20295 1.66051-25.73801 35.70112 33.87454 1.16236 38.19188 0 35.0369 0.33209 37.19557-1.49445-25.90405-35.70112z",
+                          "fill": "#FFE077",
+                          "width": 144.2989,
+                          "height": 38.8561
+                        },
+                        {
+                          "type": "path",
+                          "id": "JfCqO",
+                          "x": 66.0886,
+                          "y": 11.4559,
+                          "geometry": "M33.54244 44.50354c6.80812-2.82288 14.28044-9.46495 14.28044-20.59041 0-11.95572-9.631-24.07749-23.91143-23.91144-11.62362 0.16605-23.74538 8.30258-23.91145 23.91144 0.16606 8.46864 5.14761 16.60517 14.11439 20.75646-0.83026 12.28782-1.49446 33.04429-1.49446 50.31365 6.47601 1.16237 14.94465 1.66052 22.58303 0 0.16605-14.77859-0.83026-39.52029-1.66052-50.4797l0 0z",
+                          "fill": "#FFD655",
+                          "width": 47.8229,
+                          "height": 96.0499
+                        },
+                        {
+                          "type": "path",
+                          "id": "uPsph",
+                          "x": 62.1033,
+                          "y": 100.6273,
+                          "geometry": "M39.18819 0l0 5.64576c-3.65314 0.83026-11.29151 1.99261-22.58303 0.16605l0-5.81181c-5.31366 0.49816-15.60886 2.49078-16.60516 6.47602 0.3321 4.15129 12.28781 7.30627 27.39852 7.30627 15.1107 0 27.56458-2.49078 28.06272-6.97418 0-2.15866-3.81918-5.47969-16.27305-6.80811l0 0z",
+                          "fill": "#FCC438",
+                          "width": 55.4612,
+                          "height": 13.7823
+                        },
+                        {
+                          "type": "path",
+                          "id": "H9HJDz",
+                          "x": 17.9336,
+                          "y": 129.1882,
+                          "geometry": "M0 0l3.15498 38.35793 12.28783 0.66421c19.9262 0.6642 57.78598 0 85.18449 0.16605 10.46126 0.16605 23.24723 0 40.68265-0.83027 1.49448-15.60886 2.98894-38.35793 2.98894-38.35792-21.75276 0.99631-46.32842 1.66051-72.23247 1.66051-24.90775 0.16606-48.65313-0.99631-72.06642-1.66051l0 0z",
+                          "fill": "#FFD655",
+                          "width": 144.2989,
+                          "height": 39.3239
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "k7FfcZ",
+                  "name": "Classic Joystick Note",
+                  "fill": "$text-soft",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "A familiar gaming silhouette made blunt, centered, and oppositional.",
+                  "lineHeight": 1.4,
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "zyiKs",
+              "name": "Broken Orbit Direction",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "$surface",
+              "cornerRadius": "$radius-md",
+              "stroke": "$border",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 18,
+              "padding": 24,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Nv2Fw",
+                  "name": "Broken Orbit Label",
+                  "fill": "$accent",
+                  "content": "B / BROKEN ORBIT",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 11,
+                  "fontWeight": "600",
+                  "letterSpacing": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "c5fzu",
+                  "name": "Broken Orbit Stage",
+                  "width": "fill_container",
+                  "height": 260,
+                  "fill": "$surface-raised",
+                  "cornerRadius": "$radius-sm",
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "nSyCb",
+                      "name": "Broken Orbit Mark",
+                      "clip": true,
+                      "width": 180,
+                      "height": 180,
+                      "layout": "none",
+                      "children": [
+                        {
+                          "type": "path",
+                          "id": "h2AVjh",
+                          "x": 11.9413,
+                          "y": 13.68,
+                          "geometry": "M23.57869 76.32c0-24.24 19.08-51.6 48.24001-55.32l3.12-0.24-17.52001-20.76c-29.52 8.4-56.16 36.6-57.36 73.20001-1.32 32.88 19.68 67.07999 57.36 79.19998l17.52001-20.51999-3-0.48001c-29.52-3.59998-48.36-28.19999-48.36001-55.07999z",
+                          "fill": "#FBC437",
+                          "width": 74.9387,
+                          "height": 152.4
+                        },
+                        {
+                          "type": "path",
+                          "id": "Q8nbGO",
+                          "x": 92.52,
+                          "y": 13.68,
+                          "geometry": "M18.24001 0l-18.24001 20.76 3.48 0.36c22.56001 2.76 48.24001 22.44 48.24 55.2 0 32.76001-25.8 53.63999-48.24 55.20002l-3.48 0.23999 18.24 20.63998c24.12-6.47998 51.36-27.23999 56.52-65.27999 0.72-4.8 0.84001-8.88 0.6-12.83999-1.08-31.56-21.36-64.32-57.12-74.28001z",
+                          "fill": "#FBC437",
+                          "width": 75.4723,
+                          "height": 152.4
+                        },
+                        {
+                          "type": "path",
+                          "id": "rjEx0",
+                          "x": 74.4,
+                          "y": 74.4,
+                          "geometry": "M15.48 0c-7.44 0-15.48 5.88-15.48 15.84 0 7.56001 5.64 15.36001 15.6 15.36001 9.96001 0 15.48-7.8 15.48-15.36001 0.12-8.63999-6.84-15.84-15.6-15.84z",
+                          "fill": "#FBC437",
+                          "width": 31.0815,
+                          "height": 31.2
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "E1UDtH",
+                  "name": "Broken Orbit Note",
+                  "fill": "$text-soft",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Two opposing halves nearly connect—tension held in balance.",
+                  "lineHeight": 1.4,
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "LrLpW",
+              "name": "Crossed Signal Direction",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "$surface",
+              "cornerRadius": "$radius-md",
+              "stroke": "$border",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 18,
+              "padding": 24,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "jTfDd",
+                  "name": "Crossed Signal Label",
+                  "fill": "$accent",
+                  "content": "C / CROSSED SIGNAL",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 11,
+                  "fontWeight": "600",
+                  "letterSpacing": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "bpjp2",
+                  "name": "Crossed Signal Stage",
+                  "width": "fill_container",
+                  "height": 260,
+                  "fill": "$surface-raised",
+                  "cornerRadius": "$radius-sm",
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "QzgH1",
+                      "name": "Crossed Signal Mark",
+                      "clip": true,
+                      "width": 180,
+                      "height": 180,
+                      "layout": "none",
+                      "children": [
+                        {
+                          "type": "path",
+                          "id": "X61je",
+                          "x": 25.5363,
+                          "y": 13.1574,
+                          "geometry": "M30.0519 61.03806l20.24222-20.86505 14.94809 15.88235 41.88581-41.57439-34.87889 8.25259-22.26643-22.73356-49.9827 49.35986 0 49.35987 14.16955 14.94809-7.16263 32.69896 41.10726-41.88582-18.06228-17.43944 0-26.00346z",
+                          "fill": "#FAC41E",
+                          "width": 107.128,
+                          "height": 146.3668
+                        },
+                        {
+                          "type": "path",
+                          "id": "o5gvW",
+                          "x": 49.3599,
+                          "y": 100.9775,
+                          "geometry": "M84.86159 1.55709l-24.9135 23.51211-17.59515-17.90657-42.35294 43.13148 35.81315-8.87542 24.60207 24.13494 45-45.31141-20.55363-20.24222 0 1.55709z",
+                          "fill": "#FAC41E",
+                          "width": 105.4152,
+                          "height": 65.5536
+                        },
+                        {
+                          "type": "path",
+                          "id": "l9ZYnn",
+                          "x": 111.955,
+                          "y": 16.4273,
+                          "geometry": "M42.82007 41.10727l-9.34256-8.87544 7.00691-32.23183-40.48442 39.8616 22.26643 22.57784 20.55364-21.33217z",
+                          "fill": "#FAC41E",
+                          "width": 42.8201,
+                          "height": 62.4394
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "vSJuK",
+                  "name": "Crossed Signal Note",
+                  "fill": "$text-soft",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "A conversation signal interrupted and redirected into a distinct monogram.",
+                  "lineHeight": 1.4,
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "bg": {
+      "type": "color",
+      "value": "#0B0D10"
+    },
+    "surface": {
+      "type": "color",
+      "value": "#12151A"
+    },
+    "surface-raised": {
+      "type": "color",
+      "value": "#191D24"
+    },
+    "surface-soft": {
+      "type": "color",
+      "value": "#20252E"
+    },
+    "border": {
+      "type": "color",
+      "value": "#2B313C"
+    },
+    "border-strong": {
+      "type": "color",
+      "value": "#3A424F"
+    },
+    "text": {
+      "type": "color",
+      "value": "#F7F7F4"
+    },
+    "text-soft": {
+      "type": "color",
+      "value": "#C3C7CE"
+    },
+    "text-muted": {
+      "type": "color",
+      "value": "#858C98"
+    },
+    "accent": {
+      "type": "color",
+      "value": "#F4C84A"
+    },
+    "accent-strong": {
+      "type": "color",
+      "value": "#DFAF16"
+    },
+    "accent-ink": {
+      "type": "color",
+      "value": "#241D08"
+    },
+    "accent-soft": {
+      "type": "color",
+      "value": "#2A2413"
+    },
+    "success": {
+      "type": "color",
+      "value": "#55C98A"
+    },
+    "danger": {
+      "type": "color",
+      "value": "#F06464"
+    },
+    "font-ui": {
+      "type": "string",
+      "value": "Geist"
+    },
+    "font-mono": {
+      "type": "string",
+      "value": "Geist Mono"
+    },
+    "radius-sm": {
+      "type": "number",
+      "value": 8
+    },
+    "radius-md": {
+      "type": "number",
+      "value": 12
+    },
+    "radius-lg": {
+      "type": "number",
+      "value": 16
+    },
+    "space-sm": {
+      "type": "number",
+      "value": 8
+    },
+    "space-md": {
+      "type": "number",
+      "value": 16
+    },
+    "space-lg": {
+      "type": "number",
+      "value": 24
+    }
+  },
+  "fileToken": "0e948c13-6df0-4724-806d-4773c54791a0"
+}
