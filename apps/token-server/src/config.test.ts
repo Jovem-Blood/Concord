@@ -3,12 +3,16 @@ import { loadConfig } from './config.js'
 
 const requiredEnvironment = {
   NODE_ENV: 'production',
-  LIVEKIT_URL: 'wss://livekit.example.com',
-  LIVEKIT_API_KEY: 'api-key',
-  LIVEKIT_API_SECRET: 'api-secret-with-at-least-thirty-two-characters',
+  CLOUDFLARE_SFU_APP_ID: 'app-id',
+  CLOUDFLARE_SFU_APP_SECRET: 'app-secret',
 }
 
 describe('TURN configuration', () => {
+  it('requires SFU credentials even in development', () => {
+    expect(() => loadConfig({})).toThrow('CLOUDFLARE_SFU_APP_ID')
+    expect(() => loadConfig({ CLOUDFLARE_SFU_APP_ID: 'app' })).toThrow('CLOUDFLARE_SFU_APP_SECRET')
+    expect(loadConfig(requiredEnvironment).cloudflareSfu).toEqual({ appId: 'app-id', appSecret: 'app-secret' })
+  })
   it('loads Cloudflare TURN when both credentials are configured', () => {
     const config = loadConfig({
       ...requiredEnvironment,
