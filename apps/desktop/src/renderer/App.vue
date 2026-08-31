@@ -226,102 +226,138 @@ onBeforeUnmount(() => {
 
 <template>
   <main v-if="!currentRoomCode" class="welcome-shell">
-    <section class="welcome-card">
-      <div class="brand-mark">C</div>
-      <p class="eyebrow">Concord</p>
-      <h1>Entre e compartilhe.</h1>
-      <p class="welcome-copy">Uma sala privada para transmitir sua tela enquanto vocês conversam onde preferirem.</p>
-
-      <div v-if="invitedRoomCode" class="invite-banner">
-        <span>Você recebeu um convite para</span>
-        <strong>{{ invitedRoomCode }}</strong>
+    <section class="welcome-frame">
+      <div class="welcome-intro">
+        <div class="brand-lockup">
+          <div class="brand-mark">C</div>
+          <div><strong>Concord</strong><span>screen sharing privado</span></div>
+        </div>
+        <div class="welcome-message">
+          <p class="eyebrow">Direto ao ponto</p>
+          <h1>Mostre sua tela.<br />Continue a conversa.</h1>
+          <p>Uma sala leve para compartilhar janelas e monitores com seu grupo, sem contas ou configuração demorada.</p>
+        </div>
+        <div class="privacy-note"><span aria-hidden="true">✓</span> Acesso somente por código ou link</div>
       </div>
 
-      <label class="field">
-        <span>Seu nome</span>
-        <input v-model="displayName" maxlength="32" placeholder="Como seus amigos verão você" autofocus />
-      </label>
+      <section class="welcome-card" aria-labelledby="access-title">
+        <header class="access-header">
+          <p class="eyebrow">Acessar o Concord</p>
+          <h2 id="access-title">{{ invitedRoomCode ? 'Seu convite está pronto' : 'Comece uma sala privada' }}</h2>
+          <p>{{ invitedRoomCode ? 'Informe seu nome para entrar.' : 'Dê um nome à sala começando pelo seu.' }}</p>
+        </header>
 
-      <button v-if="invitedRoomCode" class="button primary full" :disabled="!canSubmit" @click="joinRoom(invitedRoomCode)">
-        Entrar nesta sala
-      </button>
-      <button v-else class="button primary full" :disabled="!canSubmit" @click="createRoom">Criar uma sala</button>
+        <div v-if="invitedRoomCode" class="invite-banner">
+          <span>Sala do convite</span>
+          <strong>{{ invitedRoomCode }}</strong>
+        </div>
 
-      <div class="divider"><span>{{ invitedRoomCode ? 'ou use outro código' : 'ou entre em uma' }}</span></div>
-      <div class="join-row">
-        <input
-          v-model="roomCodeInput"
-          maxlength="14"
-          placeholder="CÓDIGO DA SALA"
-          aria-label="Código da sala"
-          @keyup.enter="enterRoom"
-        />
-        <button class="button secondary" :disabled="!canSubmit" @click="enterRoom">Entrar</button>
-      </div>
+        <label class="field">
+          <span>Como devemos chamar você?</span>
+          <input v-model="displayName" maxlength="32" placeholder="Seu nome" autocomplete="name" autofocus />
+        </label>
 
-      <button v-if="invitedRoomCode" class="create-alternate" :disabled="!canSubmit" @click="createRoom">Criar outra sala</button>
+        <button v-if="invitedRoomCode" class="button primary full" :disabled="!canSubmit" @click="joinRoom(invitedRoomCode)">
+          Entrar na sala
+        </button>
+        <button v-else class="button primary full" :disabled="!canSubmit" @click="createRoom">Criar sala agora</button>
 
-      <p v-if="roomState === 'joining'" class="status-note">Conectando à sala…</p>
-      <p v-if="errorMessage" class="error-banner">{{ errorMessage }}</p>
+        <div class="divider"><span>{{ invitedRoomCode ? 'Entrar com outro código' : 'Já tem um código?' }}</span></div>
+        <div class="join-row">
+          <input
+            v-model="roomCodeInput"
+            maxlength="14"
+            placeholder="CÓDIGO DA SALA"
+            aria-label="Código da sala"
+            @keyup.enter="enterRoom"
+          />
+          <button class="button secondary" :disabled="!canSubmit" @click="enterRoom">Entrar</button>
+        </div>
+
+        <button v-if="invitedRoomCode" class="create-alternate" :disabled="!canSubmit" @click="createRoom">Prefiro criar uma nova sala</button>
+
+        <p v-if="roomState === 'joining'" class="status-note" aria-live="polite">Conectando à sala…</p>
+        <p v-if="errorMessage" class="error-banner" role="alert">{{ errorMessage }}</p>
+      </section>
     </section>
   </main>
 
   <div v-else class="app-shell">
     <header class="topbar">
       <div class="brand-inline"><span class="brand-mark small">C</span><strong>Concord</strong></div>
-      <button class="room-code" title="Copiar link da sala" @click="copyLink">
-        <span>Sala</span><strong>{{ currentRoomCode }}</strong><small>{{ copied ? 'Copiado!' : 'Copiar link' }}</small>
-      </button>
+      <div class="room-context">
+        <span>Sala privada</span>
+        <button class="room-code" :aria-label="copied ? 'Link copiado' : 'Copiar link da sala'" @click="copyLink">
+          <strong>{{ currentRoomCode }}</strong><small>{{ copied ? 'Copiado' : 'Copiar link' }}</small>
+        </button>
+      </div>
       <div class="connection-state" :data-state="roomState"><span />{{ statusLabel }}</div>
     </header>
 
     <div class="workspace">
       <aside class="sidebar">
+        <div class="sidebar-room">
+          <span class="sidebar-kicker">Nesta sala</span>
+          <strong>{{ currentRoomCode }}</strong>
+          <small>Compartilhamento protegido pelo link</small>
+        </div>
         <div class="sidebar-heading">
           <h2>Participantes</h2><span>{{ participants.length }}</span>
         </div>
         <ul class="participant-list">
           <li v-for="participant in participants" :key="participant.identity">
             <span class="avatar">{{ participant.name.slice(0, 1).toUpperCase() }}</span>
-            <span><strong>{{ participant.name }}</strong><small>{{ participant.isLocal ? 'Você' : 'Na sala' }}</small></span>
+            <span><strong>{{ participant.name }}</strong><small>{{ participant.isLocal ? 'Você' : 'Conectado' }}</small></span>
           </li>
         </ul>
         <button class="leave-button" @click="leaveRoom">Sair da sala</button>
       </aside>
 
       <section class="stage">
-        <div v-if="errorMessage" class="error-banner stage-error">{{ errorMessage }}<button @click="errorMessage = ''">×</button></div>
-        <div v-if="shareNotice" class="notice-banner stage-notice">{{ shareNotice }}<button @click="shareNotice = ''">×</button></div>
+        <header class="stage-header">
+          <div>
+            <p class="eyebrow">Transmissões</p>
+            <h1>Palco da sala</h1>
+          </div>
+          <span class="stage-count">{{ shares.length + (localStream ? 1 : 0) }} {{ shares.length + (localStream ? 1 : 0) === 1 ? 'tela' : 'telas' }}</span>
+        </header>
 
-        <div v-if="shares.length === 0 && !localStream" class="empty-stage">
-          <div class="empty-illustration"><span /><span /><span /></div>
-          <h2>Ninguém está compartilhando</h2>
-          <p>Escolha uma janela ou monitor para começar.</p>
+        <div class="stage-canvas">
+          <div v-if="errorMessage" class="error-banner stage-error" role="alert">{{ errorMessage }}<button aria-label="Fechar erro" @click="errorMessage = ''">×</button></div>
+          <div v-if="shareNotice" class="notice-banner stage-notice">{{ shareNotice }}<button aria-label="Fechar aviso" @click="shareNotice = ''">×</button></div>
+
+          <div v-if="shares.length === 0 && !localStream" class="empty-stage">
+            <div class="empty-illustration" aria-hidden="true"><span /><span /></div>
+            <h2>O palco está livre</h2>
+            <p>Compartilhe uma janela ou monitor quando estiver pronto.</p>
+            <button class="button primary" :disabled="shareState !== 'idle'" @click="openPicker">Compartilhar minha tela</button>
+          </div>
+
+          <div v-else class="media-grid" :class="{ 'has-focus': focusedShareKey }">
+            <article v-if="localStream" class="media-tile local" :class="{ hidden: focusedShareKey }">
+              <video ref="localPreview" autoplay playsinline muted :srcObject="localStream" />
+              <footer><span class="live-dot" />Sua tela <span class="audio-badge">Prévia local</span></footer>
+            </article>
+            <MediaTile
+              v-for="share in shares"
+              :key="share.key"
+              :share="share"
+              :focused="focusedShareKey === share.key"
+              :class="{ hidden: focusedShareKey && focusedShareKey !== share.key }"
+              @focus="focusedShareKey = focusedShareKey === share.key ? '' : share.key"
+            />
+          </div>
         </div>
 
-        <div v-else class="media-grid" :class="{ 'has-focus': focusedShareKey }">
-          <article v-if="localStream" class="media-tile local" :class="{ hidden: focusedShareKey }">
-            <video ref="localPreview" autoplay playsinline muted :srcObject="localStream" />
-            <footer><span class="live-dot" />Sua tela <span class="audio-badge">prévia local</span></footer>
-          </article>
-          <MediaTile
-            v-for="share in shares"
-            :key="share.key"
-            :share="share"
-            :focused="focusedShareKey === share.key"
-            :class="{ hidden: focusedShareKey && focusedShareKey !== share.key }"
-            @focus="focusedShareKey = focusedShareKey === share.key ? '' : share.key"
-          />
-        </div>
-
-        <div class="stage-actions">
+        <footer class="stage-actions">
+          <span>{{ shareState === 'sharing' ? 'Sua tela está visível para a sala' : 'Áudio do sistema é opcional' }}</span>
           <button v-if="shareState === 'sharing' || shareState === 'stopping'" class="button danger" :disabled="shareState === 'stopping'" @click="stopSharing">
             {{ shareState === 'stopping' ? 'Parando…' : 'Parar transmissão' }}
           </button>
           <button v-else class="button primary" :disabled="shareState !== 'idle'" @click="openPicker">
             {{ shareState === 'starting' ? 'Iniciando…' : 'Compartilhar tela' }}
           </button>
-        </div>
+        </footer>
       </section>
     </div>
   </div>

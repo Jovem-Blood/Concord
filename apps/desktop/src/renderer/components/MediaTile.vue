@@ -41,15 +41,18 @@ onBeforeUnmount(detach)
 </script>
 
 <template>
-  <article class="media-tile" :class="{ focused }" @click="emit('focus')">
+  <article class="media-tile" :class="{ focused }">
     <video ref="videoElement" autoplay playsinline muted />
     <audio ref="audioElement" autoplay />
-    <div v-if="!share.videoTrack" class="media-placeholder">Aguardando vídeo…</div>
+    <div v-if="!share.videoTrack" class="media-placeholder"><span />Aguardando vídeo…</div>
+    <button class="focus-button" :aria-label="focused ? 'Sair do foco' : `Focar tela de ${share.participantName}`" @click="emit('focus')">
+      {{ focused ? 'Reduzir' : 'Focar' }}
+    </button>
     <footer>
       <span class="live-dot" />
-      {{ share.participantName }}
-      <span v-if="share.audioTrack" class="audio-badge">com áudio</span>
-      <button v-if="audioBlocked" class="button" @click.stop="playAudio">Ativar áudio</button>
+      <strong>{{ share.participantName }}</strong>
+      <span v-if="share.audioTrack" class="audio-badge">Com áudio</span>
+      <button v-if="audioBlocked" class="audio-button" @click="playAudio">Ativar áudio</button>
     </footer>
   </article>
 </template>
