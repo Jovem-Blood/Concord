@@ -1,32 +1,16 @@
-services:
-  livekit:
-    image: livekit/livekit-server:v1.13.5
-    command: --config /etc/livekit.yaml
-    restart: unless-stopped
-    environment:
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
-    volumes:
-      - ./livekit.production.yaml:/etc/livekit.yaml:ro
-    ports:
-      # Signaling is intentionally loopback-only; publish it through Caddy or cloudflared.
-      - "127.0.0.1:7880:7880/tcp"
-      # WebRTC media must reach LiveKit directly and cannot cross an HTTP tunnel.
-      - "7881:7881/tcp"
-      - "7882:7882/udp"
-      - "3478:3478/udp"
-      - "30000-30100:30000-30100/udp"
+name: infra
 
+services:
   token-server:
     build:
-      context: ..
+      context: .
       dockerfile: apps/token-server/Dockerfile
     restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 3001
-      LIVEKIT_URL: ${LIVEKIT_URL}
-      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
-      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      CLOUDFLARE_SFU_APP_ID: ${CLOUDFLARE_SFU_APP_ID:?Set CLOUDFLARE_SFU_APP_ID in .env}
+      CLOUDFLARE_SFU_APP_SECRET: ${CLOUDFLARE_SFU_APP_SECRET:?Set CLOUDFLARE_SFU_APP_SECRET in .env}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       CLOUDFLARE_TURN_KEY_ID: ${CLOUDFLARE_TURN_KEY_ID:-}
       CLOUDFLARE_TURN_API_TOKEN: ${CLOUDFLARE_TURN_API_TOKEN:-}
@@ -36,7 +20,7 @@ services:
 
   web:
     build:
-      context: ..
+      context: .
       dockerfile: apps/desktop/Dockerfile.web
       args:
         VITE_TOKEN_SERVER_URL: ${PUBLIC_TOKEN_SERVER_URL:-${PUBLIC_APP_URL}}
@@ -51,7 +35,6 @@ services:
     image: caddy:2.10.2-alpine
     restart: unless-stopped
     depends_on:
-      - livekit
       - token-server
       - web
     ports:
@@ -59,7 +42,7 @@ services:
       - "443:443/tcp"
       - "443:443/udp"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
 

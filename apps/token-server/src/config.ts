@@ -3,23 +3,17 @@ import type { CloudflareTurnConfig } from './turn.js'
 export type ServerConfig = {
   host: string
   port: number
-  livekitUrl: string
-  livekitApiKey: string
-  livekitApiSecret: string
+  cloudflareSfu: { appId: string; appSecret: string }
   allowedOrigins: string[]
   cloudflareTurn?: CloudflareTurnConfig
 }
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): ServerConfig {
-  const isProduction = environment.NODE_ENV === 'production'
-  const livekitUrl = environment.LIVEKIT_URL ?? (isProduction ? '' : 'ws://localhost:7880')
-  const livekitApiKey = environment.LIVEKIT_API_KEY ?? (isProduction ? '' : 'devkey')
-  const livekitApiSecret = environment.LIVEKIT_API_SECRET ?? (isProduction ? '' : 'secret')
-
-  if (!livekitUrl || !livekitApiKey || !livekitApiSecret) {
-    throw new Error('LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET are required')
+  const appId = environment.CLOUDFLARE_SFU_APP_ID?.trim()
+  const appSecret = environment.CLOUDFLARE_SFU_APP_SECRET?.trim()
+  if (!appId || !appSecret) {
+    throw new Error('CLOUDFLARE_SFU_APP_ID and CLOUDFLARE_SFU_APP_SECRET are required')
   }
-  if (!/^(wss?|https?):\/\//.test(livekitUrl)) throw new Error('LIVEKIT_URL must be a valid LiveKit URL')
 
   const turnKeyId = environment.CLOUDFLARE_TURN_KEY_ID?.trim() ?? ''
   const turnApiToken = environment.CLOUDFLARE_TURN_API_TOKEN?.trim() ?? ''
@@ -35,9 +29,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): Server
   return {
     host: environment.HOST ?? '0.0.0.0',
     port: Number.parseInt(environment.PORT ?? '3001', 10),
-    livekitUrl,
-    livekitApiKey,
-    livekitApiSecret,
+    cloudflareSfu: { appId, appSecret },
     allowedOrigins: (environment.ALLOWED_ORIGINS ?? '')
       .split(',')
       .map((origin) => origin.trim())
