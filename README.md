@@ -31,7 +31,7 @@ pnpm dev:server
 
 Em outro terminal, execute `pnpm dev:web` (web em `http://localhost:5173`) ou `pnpm dev:desktop`. A API carrega automaticamente o `.env` da raiz. Um convite como `http://localhost:5173/ABCD2345` prepara a entrada na sala.
 
-Com Docker, execute `docker compose --env-file .env -f infra/docker-compose.yml up --build` e abra `http://localhost:4173`. Não há SFU local: mesmo em desenvolvimento, a mídia usa a Cloudflare. Testes unitários usam um SFU simulado e não exigem credenciais.
+Com Docker, execute `docker compose up --build` na raiz do projeto e abra `http://localhost:4173`. O Compose carrega o `.env` da raiz automaticamente. Não há SFU local: mesmo em desenvolvimento, a mídia usa a Cloudflare. Testes unitários usam um SFU simulado e não exigem credenciais.
 
 ## Configuração
 

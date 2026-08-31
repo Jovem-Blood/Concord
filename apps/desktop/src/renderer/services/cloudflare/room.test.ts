@@ -54,6 +54,7 @@ function setup() {
   vi.stubGlobal('RTCPeerConnection', FakePeer)
   const presence = { participants: [{ identity: 'local', name: 'Local' }, { identity: 'remote', name: 'Remote' }], tracks: [] as { sessionId: string; trackName: string; kind: string; participantIdentity: string; participantName: string }[] }
   let nextRoomStatus = 200
+  let nextSessionStatus = 200
   const calls: { path: string; body: Record<string, unknown> }[] = []
   const fetcher = vi.fn(async (url: string, options: RequestInit) => {
     const path = url.split('/v1/')[1]!
@@ -64,7 +65,14 @@ function setup() {
       nextRoomStatus = 200
       return new Response(JSON.stringify(presence), { status })
     }
-    if (path === 'session') return new Response('{"sessionId":"local-session"}')
+    if (path === 'session') {
+      if (!options.body && new Headers(options.headers).get('content-type') === 'application/json') {
+        return new Response('{"error":"FST_ERR_CTP_EMPTY_JSON_BODY"}', { status: 400 })
+      }
+      const status = nextSessionStatus
+      nextSessionStatus = 200
+      return new Response('{"sessionId":"local-session"}', { status })
+    }
     if (path === 'tracks') {
       const tracks = body.tracks as { location: string; mid?: string; kind?: string; sessionId?: string; trackName: string }[]
       if (tracks[0]!.location === 'local') return new Response(JSON.stringify({ tracks, sessionDescription: { type: 'answer', sdp: 'answer-sdp' } }))
@@ -86,7 +94,11 @@ function setup() {
     const tracks = [new FakeTrack('video', 'screen'), ...(audio ? [new FakeTrack('audio', 'system-audio')] : [])]
     return { tracks, media: { getTracks: () => tracks, getVideoTracks: () => tracks.filter((t) => t.kind === 'video') } as unknown as MediaStream }
   }
-  return { service, presence, calls, states, snapshots, connect, stream, failNextPoll: (status: number) => { nextRoomStatus = status } }
+  return {
+    service, presence, calls, states, snapshots, connect, stream,
+    failNextPoll: (status: number) => { nextRoomStatus = status },
+    failNextSession: (status: number) => { nextSessionStatus = status },
+  }
 }
 
 describe('Cloudflare WebRTC room lifecycle', () => {
@@ -146,6 +158,21 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     expect(states[states.length - 1]).toBe('connected')
   })
 
+  it('does not enter a reconnect loop when initial publication fails', async () => {
+    const { connect, service, calls, stream, states, failNextSession } = setup()
+    await connect()
+    const capture = stream(false)
+    failNextSession(500)
+
+    await expect(service.publishScreen(capture.media, 'smooth')).rejects.toThrow('não pôde ser transmitida')
+    expect(capture.tracks[0]!.readyState).toBe('ended')
+    expect(states[states.length - 1]).toBe('connected')
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(calls.filter((call) => call.path === 'session')).toHaveLength(1)
+    expect(states[states.length - 1]).toBe('connected')
+  })
+
   it('stops capture and clears state when the API revokes the participant token', async () => {
     const { connect, service, stream, failNextPoll, states, snapshots } = setup()
     await connect()
@@ -168,4 +195,3 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     expect(calls[calls.length - 1]!.path).toBe('leave')
   })
 })
-

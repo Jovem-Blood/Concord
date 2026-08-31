@@ -2,11 +2,13 @@
 
 A mídia usa Cloudflare Realtime Serverless SFU. Não há servidor de mídia local, hostname de signaling separado nem portas de entrada UDP para WebRTC no host do Concord. A API Fastify mantém presença e autoriza operações; o cliente negocia WebRTC diretamente com a Cloudflare.
 
+Execute todos os comandos Compose abaixo na raiz do projeto. O Compose carrega o `.env` da raiz automaticamente.
+
 ## Desenvolvimento
 
 1. Copie `.env.example` para `.env`, preservando uma configuração existente.
 2. Crie um aplicativo em Cloudflare → Realtime → Serverless SFU e preencha `CLOUDFLARE_SFU_APP_ID` e `CLOUDFLARE_SFU_APP_SECRET`.
-3. Execute `docker compose --env-file .env -f infra/docker-compose.yml up --build`.
+3. Na raiz do projeto, execute `docker compose up --build`.
 4. Abra `http://localhost:4173`; a API fica em `http://localhost:3001`.
 
 Sem Docker: `pnpm dev:server` carrega o `.env` da raiz; em outro terminal, execute `pnpm dev:web` ou `pnpm dev:desktop`. O SFU é remoto mesmo em desenvolvimento. Testes unitários não precisam de credenciais.
@@ -16,7 +18,7 @@ Sem Docker: `pnpm dev:server` carrega o `.env` da raiz; em outro terminal, execu
 1. Aponte `concord.example.com` para o host da aplicação.
 2. Opcionalmente execute `./scripts/setup-self-host.sh concord.example.com` para preparar arquivos novos. O script recusa sobrescrever arquivos existentes; `--force` substitui ambos e apaga suas credenciais anteriores.
 3. Preencha as credenciais SFU no `.env`. Copie `infra/Caddyfile.example` para `infra/Caddyfile` e ajuste o domínio.
-4. Execute `docker compose --env-file .env -f infra/docker-compose.production.yml up -d --build`.
+4. Na raiz do projeto, execute `docker compose -f docker-compose.production.yml up -d --build`.
 5. Configure `VITE_TOKEN_SERVER_URL` e `VITE_WEB_APP_URL` em `apps/desktop/.env.local` e execute `pnpm make` para atualizar os clientes Windows.
 
 Somente o Caddy publica portas de entrada `80/TCP`, `443/TCP` e, opcionalmente, `443/UDP` para HTTP/3. As portas `3001` e `4173` ficam em loopback. A API precisa de saída HTTPS para `rtc.live.cloudflare.com`; os clientes precisam alcançar a rede WebRTC da Cloudflare. Não é necessário encaminhar portas do roteador para mídia.
@@ -38,7 +40,7 @@ ingress:
 Nesse caso, suba somente os serviços de aplicação:
 
 ```sh
-docker compose --env-file .env -f infra/docker-compose.production.yml up -d --build token-server web
+docker compose -f docker-compose.production.yml up -d --build token-server web
 ```
 
 Se `cloudflared` estiver em outro contêiner na mesma rede, use `http://token-server:3001` e `http://web:4173`. O Tunnel transporta a API e os arquivos web; a mídia vai do cliente para a Cloudflare sem passar pelo host Concord. Não faça cache de `/v1/*`.

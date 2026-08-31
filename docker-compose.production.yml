@@ -1,7 +1,9 @@
+name: infra
+
 services:
   token-server:
     build:
-      context: ..
+      context: .
       dockerfile: apps/token-server/Dockerfile
     restart: unless-stopped
     environment:
@@ -18,7 +20,7 @@ services:
 
   web:
     build:
-      context: ..
+      context: .
       dockerfile: apps/desktop/Dockerfile.web
       args:
         VITE_TOKEN_SERVER_URL: ${PUBLIC_TOKEN_SERVER_URL:-${PUBLIC_APP_URL}}
@@ -40,7 +42,7 @@ services:
       - "443:443/tcp"
       - "443:443/udp"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
 

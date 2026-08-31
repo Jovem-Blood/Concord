@@ -63,9 +63,9 @@ export class CloudflareRoomService {
       } catch (error) {
         this.localStream = null
         stream.getTracks().forEach((track) => track.stop())
-        // The SFU may have accepted part of the offer; discard the entire session on recovery.
-        this.needsReset = true
-        this.connectionListener?.('reconnecting')
+        // Publishing failed, but room polling is still healthy. Retry media only on the next explicit share.
+        this.disposePeer()
+        this.connectionListener?.('connected')
         throw new AppError('TRACK_PUBLISH_FAILED', 'A captura iniciou, mas não pôde ser transmitida.', { cause: error })
       }
     })
@@ -119,7 +119,10 @@ export class CloudflareRoomService {
     if (!credentials) throw new SignalingError(401)
     const response = await fetch(`${tokenServerUrl}/v1/${path}`, {
       method: path === 'room' ? 'GET' : 'POST',
-      headers: { authorization: `Bearer ${credentials.participantToken}`, 'content-type': 'application/json' },
+      headers: {
+        authorization: `Bearer ${credentials.participantToken}`,
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       cache: 'no-store', signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(25_000)]),
     })
