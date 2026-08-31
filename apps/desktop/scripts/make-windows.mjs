@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, rmSync } from 'node:fs'
+import { copyFileSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import process from 'node:process'
@@ -31,6 +31,7 @@ const localSevenZipFiles = ['7z.exe', '7z.dll'].map((fileName) => ({
 for (const file of localSevenZipFiles) copyFileSync(file.source, file.target)
 
 let result
+const buildStartedAt = Date.now()
 try {
   result = spawnSync(
     process.execPath,
@@ -42,4 +43,18 @@ try {
 }
 
 if (result.error) throw result.error
+if (result.status === 0) {
+  const { version } = JSON.parse(readFileSync(path.join(workingDirectory, 'package.json'), 'utf8'))
+  const artifacts = [
+    path.join(workingDirectory, 'out/make/squirrel.windows/x64/Concord-Setup.exe'),
+    path.join(workingDirectory, `out/make/zip/win32/x64/Concord-win32-x64-${version}.zip`),
+  ]
+  const freshArtifacts = artifacts.every((artifact) => {
+    try { return statSync(artifact).mtimeMs >= buildStartedAt - 2_000 } catch { return false }
+  })
+  if (!freshArtifacts) {
+    process.stderr.write('Forge exited without creating fresh Windows artifacts. Retry with Node.js 24 LTS.\n')
+    process.exit(1)
+  }
+}
 process.exit(result.status ?? 1)

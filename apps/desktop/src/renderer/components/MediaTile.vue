@@ -1,24 +1,38 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { RemoteShareView } from '../services/livekit/types'
+import type { RemoteShareView } from '../services/cloudflare/types'
 
 const props = defineProps<{ share: RemoteShareView; focused: boolean }>()
 const emit = defineEmits<{ focus: [] }>()
 
 const videoElement = ref<HTMLVideoElement | null>(null)
 const audioElement = ref<HTMLAudioElement | null>(null)
+const audioBlocked = ref(false)
 
 function attach(): void {
-  if (videoElement.value && props.share.videoTrack) props.share.videoTrack.attach(videoElement.value)
-  if (audioElement.value && props.share.audioTrack) props.share.audioTrack.attach(audioElement.value)
+  if (videoElement.value) videoElement.value.srcObject = props.share.videoTrack ? new MediaStream([props.share.videoTrack]) : null
+  if (audioElement.value) {
+    audioElement.value.srcObject = props.share.audioTrack ? new MediaStream([props.share.audioTrack]) : null
+    if (props.share.audioTrack) void playAudio()
+  }
 }
 
 function detach(): void {
-  if (videoElement.value) props.share.videoTrack?.detach(videoElement.value)
-  if (audioElement.value) props.share.audioTrack?.detach(audioElement.value)
+  if (videoElement.value) videoElement.value.srcObject = null
+  if (audioElement.value) audioElement.value.srcObject = null
+  audioBlocked.value = false
 }
 
-watch(() => [props.share.videoTrack, props.share.audioTrack], () => {
+async function playAudio(): Promise<void> {
+  try {
+    await audioElement.value?.play()
+    audioBlocked.value = false
+  } catch {
+    audioBlocked.value = true
+  }
+}
+
+watch([() => props.share.videoTrack, () => props.share.audioTrack], () => {
   detach()
   attach()
 })
@@ -28,13 +42,14 @@ onBeforeUnmount(detach)
 
 <template>
   <article class="media-tile" :class="{ focused }" @click="emit('focus')">
-    <video ref="videoElement" autoplay playsinline />
+    <video ref="videoElement" autoplay playsinline muted />
     <audio ref="audioElement" autoplay />
     <div v-if="!share.videoTrack" class="media-placeholder">Aguardando vídeo…</div>
     <footer>
       <span class="live-dot" />
       {{ share.participantName }}
       <span v-if="share.audioTrack" class="audio-badge">com áudio</span>
+      <button v-if="audioBlocked" class="button" @click.stop="playAudio">Ativar áudio</button>
     </footer>
   </article>
 </template>

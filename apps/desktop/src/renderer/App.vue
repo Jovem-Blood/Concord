@@ -10,11 +10,11 @@ import { createRoomLink, roomCodeFromRoute } from './domain/room-link'
 import { generateRoomCode, isValidRoomCode, normalizeRoomCode } from './domain/room-code'
 import type { RoomState, ShareState } from './domain/state'
 import { captureProvider } from './services/capture/provider'
-import { LiveKitRoomService } from './services/livekit/room'
-import type { ParticipantView, RemoteShareView } from './services/livekit/types'
+import { CloudflareRoomService } from './services/cloudflare/room'
+import type { ParticipantView, RemoteShareView } from './services/cloudflare/types'
 import { requestJoinToken } from './services/token'
 
-const roomService = new LiveKitRoomService()
+const roomService = new CloudflareRoomService()
 const route = useRoute()
 const router = useRouter()
 const displayName = ref(localStorage.getItem('displayName') ?? '')
@@ -67,6 +67,7 @@ roomService.onConnection((state) => {
   roomState.value = state
   if (state === 'disconnected' && currentRoomCode.value) {
     errorMessage.value = 'A conexão com a sala foi encerrada.'
+    void stopSharing()
   }
 })
 
@@ -87,7 +88,7 @@ async function joinRoom(roomCode: string): Promise<void> {
   errorMessage.value = ''
   try {
     const credentials = await requestJoinToken(normalizedCode, name)
-    await roomService.connect(credentials.serverUrl, credentials.participantToken, credentials.iceServers)
+    await roomService.connect(credentials)
     localStorage.setItem('displayName', name)
     currentRoomCode.value = normalizedCode
     roomCodeInput.value = normalizedCode

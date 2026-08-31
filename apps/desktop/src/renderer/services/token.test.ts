@@ -6,7 +6,8 @@ afterEach(() => vi.unstubAllGlobals())
 describe('requestJoinToken', () => {
   it('accepts temporary ICE servers from the token server', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-      serverUrl: 'wss://livekit.example.com',
+      identity: 'participant-id',
+      expiresAt: 4102444800000,
       participantToken: 'signed.jwt.value',
       iceServers: [
         { urls: ['stun:stun.cloudflare.com:3478'] },
@@ -18,8 +19,9 @@ describe('requestJoinToken', () => {
       ],
     }), { status: 200 })))
 
-    await expect(requestJoinToken('ABCD2345', 'Thiago')).resolves.toEqual({
-      serverUrl: 'wss://livekit.example.com',
+    await expect(requestJoinToken('ABCD2345', 'Thiago')).resolves.toMatchObject({
+      identity: 'participant-id',
+      expiresAt: 4102444800000,
       participantToken: 'signed.jwt.value',
       iceServers: [
         { urls: ['stun:stun.cloudflare.com:3478'] },
@@ -34,7 +36,8 @@ describe('requestJoinToken', () => {
 
   it('rejects malformed ICE server data', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-      serverUrl: 'wss://livekit.example.com',
+      identity: 'participant-id',
+      expiresAt: 4102444800000,
       participantToken: 'signed.jwt.value',
       iceServers: [{ urls: [42] }],
     }), { status: 200 })))
