@@ -1,69 +1,141 @@
-# Concord
+<p align="center">
+  <img src="docs/assets/concord-banner.png" alt="Concord — screen, voice, and chat" width="100%" />
+</p>
 
-Cliente web e aplicativo Windows para conversa por voz, chat efêmero e compartilhamento de tela em salas privadas. Ambos usam o mesmo renderer Vue, com mídia e DataChannels no **Cloudflare Realtime Serverless SFU** e sinalização autorizada pela API Fastify do projeto.
+<p align="center">
+  <strong>English</strong> · <a href="README.pt-BR.md">Português do Brasil</a>
+</p>
 
-## Recursos
+<p align="center">
+  A private, lightweight room for sharing your screen, talking, and exchanging ephemeral messages.
+</p>
 
-- Criação e entrada por código, links de convite e botão **Copiar link**.
-- Web e Electron assistindo e transmitindo na mesma sala.
-- Captura nativa do navegador; seleção de monitores/janelas com miniaturas no Windows.
-- Perfis `1080p30` para movimento e `1080p15` para texto.
-- Áudio de sistema opcional, desligado por padrão.
-- Voz em tempo real com microfone, mute imediato, silenciar sala e indicador local de fala.
-- Chat de texto confiável e ordenado, sem histórico, limitado a 2.000 caracteres e 500 mensagens em memória.
-- Até 16 participantes por sala, com várias telas simultâneas, foco e lista de participantes.
-- Reconexão com nova sessão SFU, republicação da captura ainda ativa e reassinatura das telas remotas.
-- Encerramento da captura ao parar, sair ou perder a sessão de sala.
-- Instalador Squirrel e pacote ZIP para Windows x64.
+<p align="center">
+  <a href="https://github.com/Jovem-Blood/Concord/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Jovem-Blood/Concord?include_prereleases&sort=semver&style=flat-square&color=FBC437&labelColor=12151A" /></a>
+  <a href="https://github.com/Jovem-Blood/Concord/actions/workflows/release.yml"><img alt="Desktop release workflow" src="https://github.com/Jovem-Blood/Concord/actions/workflows/release.yml/badge.svg" /></a>
+  <img alt="Node.js 22.12 to 24" src="https://img.shields.io/badge/Node.js-22.12%E2%80%9324-FBC437?style=flat-square&labelColor=12151A" />
+  <img alt="Windows and Linux" src="https://img.shields.io/badge/desktop-Windows%20%7C%20Linux-F7F7F4?style=flat-square&labelColor=12151A" />
+</p>
 
-Não há câmera, contas, gravação, histórico, anexos, mensagens diretas ou integração com Discord. Acesso à sala é por posse do código/link.
+> [!NOTE]
+> Concord is an early-stage project. Self-hosting requires your own Cloudflare Realtime Serverless SFU application.
 
-## Desenvolvimento
+## Why Concord?
 
-Requisitos: Node.js 22.12+ (use **Node 24 LTS** para empacotar Windows), pnpm 10 e um aplicativo Cloudflare Realtime SFU. O Electron requer Windows 11 x64; a captura web requer navegador com `getDisplayMedia` e HTTPS, exceto em localhost.
+Concord is designed for small groups that need a room quickly—not another account, community, or permanent workspace. A room is accessed through its code or invite link and combines screen sharing, voice, and ephemeral chat in the same focused interface.
 
-1. Copie `.env.example` para `.env` **se não houver configuração existente**.
-2. No painel Cloudflare → Realtime → Serverless SFU, crie um aplicativo e preencha `CLOUDFLARE_SFU_APP_ID` e `CLOUDFLARE_SFU_APP_SECRET` no `.env`.
-3. Instale dependências e inicie a API:
+- No accounts, camera, recording, message history, attachments, or direct messages.
+- Web and desktop clients share the same Vue renderer and can join the same room.
+- Media and DataChannels travel through Cloudflare Realtime; the Concord API does not receive chat contents.
+- The desktop app is available for Windows and Linux, with a self-hostable web client.
 
-```powershell
+## Features
+
+- Create or join a private room by code or invite link.
+- Share multiple screens at once, focus a stream, and see who is in the room.
+- Native desktop source picker with monitor/window previews.
+- `1080p30` motion and `1080p15` text-oriented capture profiles.
+- Optional system audio, disabled by default.
+- Real-time microphone audio, mute controls, room audio controls, and local speaking feedback.
+- Reliable, ordered text chat with no persistence: up to 2,000 characters per message and 500 messages in memory.
+- Automatic SFU session recovery, active-source republishing, and remote stream resubscription.
+- Up to 16 participants per room.
+- Portable ZIPs plus Windows NSIS and Linux AppImage releases.
+
+## Download
+
+Download the latest desktop build from [GitHub Releases](https://github.com/Jovem-Blood/Concord/releases/latest).
+
+| Platform | Packages |
+|---|---|
+| Windows x64 | NSIS installer and portable ZIP |
+| Linux x64 | AppImage and portable ZIP |
+| Web | Self-hosted build from this repository |
+
+Windows artifacts are currently unsigned and may trigger a Microsoft SmartScreen warning. Portable ZIP builds do not self-update; installed NSIS and AppImage builds check GitHub Releases for updates.
+
+## How it works
+
+```mermaid
+flowchart LR
+  Client[Web or desktop client]
+  API[Concord token and presence API]
+  SFU[Cloudflare Realtime SFU]
+
+  Client -->|room operations and short-lived credentials| API
+  API -->|session and track orchestration| SFU
+  Client <-->|screen, voice, and DataChannels| SFU
+```
+
+Cloudflare provides sessions, tracks, and DataChannels—not Concord rooms. The Fastify API keeps room presence in memory, validates opaque participant tokens, and authorizes publishing and subscriptions. Clients negotiate WebRTC through the API, while media and text flow through the SFU.
+
+Room sessions last up to two hours and expire after two minutes without activity. Run a single API instance unless you add shared coordination for room state.
+
+## Quick start
+
+### Requirements
+
+- Node.js `22.12+` for development; Node.js 24 LTS is recommended and required by the release workflow.
+- pnpm `10.15.0`.
+- A Cloudflare Realtime Serverless SFU application.
+- Windows 11 x64 for native Windows capture testing, or a current browser with `getDisplayMedia` and HTTPS outside localhost.
+
+### 1. Configure the environment
+
+Copy `.env.example` to `.env` without replacing an existing local file. Create an SFU application in **Cloudflare → Realtime → Serverless SFU**, then set:
+
+```dotenv
+CLOUDFLARE_SFU_APP_ID=your_app_id
+CLOUDFLARE_SFU_APP_SECRET=your_app_secret
+```
+
+Never place secrets in a `VITE_` variable; those values are embedded into client builds.
+
+### 2. Install and run
+
+```sh
 pnpm install
 pnpm dev:server
 ```
 
-Em outro terminal, execute `pnpm dev:web` (web em `http://localhost:5173`) ou `pnpm dev:desktop`. A API carrega automaticamente o `.env` da raiz. Um convite como `http://localhost:5173/ABCD2345` prepara a entrada na sala.
+In another terminal, start either client:
 
-Com Docker, execute `docker compose up --build` na raiz do projeto e abra `http://localhost:4173`. O Compose carrega o `.env` da raiz automaticamente. Não há SFU local: mesmo em desenvolvimento, a mídia usa a Cloudflare. Testes unitários usam um SFU simulado e não exigem credenciais.
+```sh
+pnpm dev:web       # http://localhost:5173
+pnpm dev:desktop   # Electron
+```
 
-## Configuração
+An invite such as `http://localhost:5173/ABCD2345` prepares the client to join that room.
 
-| Variável | Uso |
+### Docker
+
+```sh
+docker compose up --build
+```
+
+Open `http://localhost:4173`. Docker Compose loads the root `.env` automatically. There is no local SFU emulator: development media still uses Cloudflare. Unit tests use an SFU mock and need no credentials.
+
+## Configuration
+
+| Variable | Purpose |
 |---|---|
-| `CLOUDFLARE_SFU_APP_ID` | Identificador do aplicativo SFU, obrigatório no servidor |
-| `CLOUDFLARE_SFU_APP_SECRET` | Segredo do aplicativo SFU, somente no servidor |
-| `ALLOWED_ORIGINS` | Origens web permitidas, separadas por vírgula |
-| `PORT` | Porta da API, padrão `3001` |
-| `PUBLIC_APP_URL` | URL pública do web usada pelo Compose |
-| `PUBLIC_TOKEN_SERVER_URL` | URL pública da API incorporada ao build web pelo Compose |
-| `CLOUDFLARE_TURN_KEY_ID` | Chave TURN opcional para redes restritivas |
-| `CLOUDFLARE_TURN_API_TOKEN` | Token privado para gerar credenciais TURN temporárias |
-| `CLOUDFLARE_TURN_TTL_SECONDS` | Validade TURN em segundos, padrão `7200`, máximo `172800` |
-| `VITE_TOKEN_SERVER_URL` | URL da API em `apps/desktop/.env.local`, incorporada ao cliente |
-| `VITE_WEB_APP_URL` | Base dos convites copiados pelo Electron |
+| `CLOUDFLARE_SFU_APP_ID` | Required server-side SFU application ID |
+| `CLOUDFLARE_SFU_APP_SECRET` | Required server-side SFU application secret |
+| `ALLOWED_ORIGINS` | Comma-separated web origins accepted by the API |
+| `PORT` | API port; defaults to `3001` |
+| `PUBLIC_APP_URL` | Public web URL used by Docker Compose |
+| `PUBLIC_TOKEN_SERVER_URL` | Public API URL embedded in the Compose web build |
+| `CLOUDFLARE_TURN_KEY_ID` | Optional TURN key for restrictive networks |
+| `CLOUDFLARE_TURN_API_TOKEN` | Private token used to mint temporary TURN credentials |
+| `CLOUDFLARE_TURN_TTL_SECONDS` | TURN lifetime; defaults to `7200`, maximum `172800` |
+| `VITE_TOKEN_SERVER_URL` | API URL embedded in the client |
+| `VITE_WEB_APP_URL` | Base URL used by desktop invite links |
 
-Nunca coloque segredos em variáveis `VITE_`. A API emite um token opaco por participante e entrega somente credenciais ICE temporárias ao cliente. Sem TURN configurado, usa STUN da Cloudflare; com TURN, conexões diretas continuam permitidas. O áudio de captura web depende do navegador, sistema e fonte; quando não há áudio disponível, o vídeo continua com um aviso. O microfone só é solicitado pelo botão **Microfone** e nunca ativa a câmera.
+Without TURN configuration, Concord uses Cloudflare STUN. With TURN enabled, direct connections remain allowed. Web capture audio availability depends on the browser, operating system, and selected source; video continues with a warning when audio is unavailable.
 
-## Arquitetura e limites
+## Development
 
-O SFU fornece sessões, faixas e DataChannels, não salas. A API mantém presença em memória, valida tokens e autoriza publicação/assinatura dentro da sala. O cliente usa `RTCPeerConnection`, negocia ofertas/respostas pela API e atualiza a presença a cada três segundos. A mídia e o texto vão diretamente à Cloudflare. O servidor não recebe o conteúdo do chat.
-
-Execute uma única instância da API. Reinícios exigem que os usuários entrem novamente; múltiplas réplicas precisam de coordenação compartilhada. Sessões de sala duram até duas horas e expiram após dois minutos sem atividade. O servidor tenta encerrar as faixas abandonadas. A mídia é serverless; a API de presença continua sendo um serviço do projeto.
-
-As operações SDP são serializadas. Microfone, vídeo da tela e áudio da tela têm ciclos independentes. Em falhas transitórias, o cliente tenta reconstruir a sessão e republica cada fonte ainda ativa sem retirar o mute. Mensagens são apagadas em qualquer reconexão e nunca recuperadas. Expiração de token ou falhas persistentes encerram todas as capturas e exigem nova entrada. Esta implementação usa uma camada de vídeo com limites de bitrate por perfil; não reproduz o simulcast/adaptive stream automático do SDK anterior.
-
-## Verificações e builds
-
-```powershell
+```sh
 pnpm typecheck
 pnpm test
 pnpm lint
@@ -71,14 +143,36 @@ pnpm build
 pnpm make
 ```
 
-O build web fica em `apps/desktop/dist-web`; instalador e ZIP em `apps/desktop/out/make`. O instalador MVP não é assinado e pode acionar o SmartScreen. A [lista de testes manuais](docs/manual-test-checklist.md) cobre o teste entre computadores e redes diferentes.
+The web build is written to `apps/desktop/dist-web`. `pnpm make` builds release artifacts for the current operating system and requires Node.js 22.12 through 24.x; Node.js 24 LTS is recommended.
 
-## Segurança e produção
+Useful project references:
 
-Electron mantém `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true` e CSP. O preload expõe somente operações de captura; seleções são vinculadas à janela, expiram em dez segundos e são consumidas uma vez. A permissão de microfone aceita somente áudio solicitado pelo frame principal exato do renderer. O web usa `getDisplayMedia` mediante ação do usuário.
+- [Manual test checklist](docs/manual-test-checklist.md)
+- [Infrastructure and production deployment](infra/README.md)
+- [Design guide](design.md)
+- [Contributing guide](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 
-Veja [infra/README.md](infra/README.md) para Caddy, Cloudflare Tunnel e migração da instalação existente. Só a API e os arquivos web precisam ser hospedados. Não há portas de entrada para mídia no host Concord. Recompile os clientes e atualize a API juntos, pois o protocolo de sala mudou.
+## Releases
 
-Documentação de referência: [Cloudflare SFU HTTPS API](https://developers.cloudflare.com/realtime/sfu/https-api/) e [DataChannels](https://developers.cloudflare.com/realtime/sfu/datachannels/).
+SemVer tags such as `v0.1.0` trigger `.github/workflows/release.yml`. The tag must match `apps/desktop/package.json` and point to a commit contained in `main`. The workflow verifies the project, builds Windows and Linux artifacts, generates SHA-256 checksums, and publishes a GitHub Release.
 
-Áudio de um processo específico no Windows permanece fora do MVP.
+## Privacy and security
+
+Electron runs with `nodeIntegration: false`, `contextIsolation: true`, sandboxing, and a restrictive Content Security Policy. Its preload exposes only capture operations. Capture selections are tied to the requesting window, expire after ten seconds, and are consumed once.
+
+The microphone is requested only after the user presses its control and never enables a camera. Messages are erased on every reconnect and are never recovered. Token expiry or persistent connection failure stops all active capture and requires joining again.
+
+Please report vulnerabilities privately according to [SECURITY.md](SECURITY.md).
+
+## Deliberate limits
+
+Concord does not currently provide cameras, user accounts, recording, persistent history, attachments, direct messages, process-specific Windows audio, or automatic multi-instance API coordination. The current implementation uses one video layer with profile-specific bitrate limits rather than simulcast.
+
+## Contributing
+
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before starting, and use the manual checklist for changes involving capture, media, or cross-device behavior.
+
+## License
+
+No open-source license has been selected yet. Until a license is added, the source is publicly visible but all rights remain reserved.
