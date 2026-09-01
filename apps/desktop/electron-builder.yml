@@ -1,0 +1,40 @@
+appId: com.opeixoto.concord
+productName: Concord
+npmRebuild: false
+
+directories:
+  output: out/make/builder
+
+publish:
+  provider: github
+  owner: Jovem-Blood
+  repo: Concord
+
+win:
+  icon: assets/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: Concord-Setup-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+
+linux:
+  executableName: Concord
+  icon: assets/icon.png
+  category: Network
+  syncDesktopName: true
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  artifactName: Concord-${version}-linux-${arch}.${ext}
+
+appImage:
+  artifactName: Concord-${version}-linux-${arch}.${ext}

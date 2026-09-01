@@ -3,6 +3,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { registerCaptureHandlers } from './capture'
 import { microphonePermission, trustedRendererUrl } from './permissions'
+import { startAutoUpdates } from './updater'
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined
 declare const MAIN_WINDOW_VITE_NAME: string
@@ -84,6 +85,7 @@ app.whenReady().then(() => {
   })
 
   createMainWindow()
+  startAutoUpdates()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
   })
