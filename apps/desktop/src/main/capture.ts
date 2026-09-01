@@ -38,8 +38,11 @@ async function loadSources(): Promise<CaptureSourceDTO[]> {
 }
 
 export function registerCaptureHandlers(mainWindow: BrowserWindow, appSession: Session): () => void {
+  const renderer = mainWindow.webContents
+  const rendererId = renderer.id
+  const rendererFrame = renderer.mainFrame
   const isTrustedSender = (senderId: number) =>
-    !mainWindow.isDestroyed() && senderId === mainWindow.webContents.id
+    !mainWindow.isDestroyed() && senderId === rendererId
 
   ipcMain.handle('capture:list-sources', async (event) => {
     if (!isTrustedSender(event.sender.id)) throw new Error('Untrusted capture source request')
@@ -62,11 +65,10 @@ export function registerCaptureHandlers(mainWindow: BrowserWindow, appSession: S
   })
 
   appSession.setDisplayMediaRequestHandler(async (request, callback) => {
-    const senderId = mainWindow.webContents.id
-    const selection = pendingSelections.get(senderId)
-    pendingSelections.delete(senderId)
+    const selection = pendingSelections.get(rendererId)
+    pendingSelections.delete(rendererId)
 
-    const isExpectedFrame = request.frame === mainWindow.webContents.mainFrame
+    const isExpectedFrame = request.frame === rendererFrame
     if (!selection || selection.expiresAt < Date.now() || !isExpectedFrame) {
       callback({})
       return
@@ -93,10 +95,11 @@ export function registerCaptureHandlers(mainWindow: BrowserWindow, appSession: S
     }
   })
 
-  const cleanup = () => pendingSelections.delete(mainWindow.webContents.id)
+  const cleanup = () => pendingSelections.delete(rendererId)
   mainWindow.on('closed', cleanup)
 
   return () => {
+    mainWindow.off('closed', cleanup)
     cleanup()
     ipcMain.removeHandler('capture:list-sources')
     ipcMain.removeHandler('capture:select-source')

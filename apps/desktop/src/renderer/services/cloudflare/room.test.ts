@@ -4,6 +4,8 @@ import type { RoomSnapshot } from './types'
 
 class FakeTrack {
   readyState = 'live'
+  enabled = true
+  muted = false
   onended: (() => void) | null = null
   constructor(readonly kind: string, readonly id: string) {}
   stop = vi.fn(() => { this.readyState = 'ended' })
@@ -52,7 +54,7 @@ afterEach(async () => {
 function setup() {
   vi.useFakeTimers()
   vi.stubGlobal('RTCPeerConnection', FakePeer)
-  const presence = { participants: [{ identity: 'local', name: 'Local' }, { identity: 'remote', name: 'Remote' }], tracks: [] as { sessionId: string; trackName: string; kind: string; participantIdentity: string; participantName: string }[] }
+  const presence = { participants: [{ identity: 'local', name: 'Local' }, { identity: 'remote', name: 'Remote' }], tracks: [] as { sessionId: string; trackName: string; kind: string; source: 'microphone' | 'screen-video' | 'screen-audio'; participantIdentity: string; participantName: string }[] }
   let nextRoomStatus = 200
   let nextSessionStatus = 200
   const calls: { path: string; body: Record<string, unknown> }[] = []
@@ -92,7 +94,7 @@ function setup() {
   const connect = () => service.connect({ participantToken: 'opaque-token', identity: 'local', expiresAt: Date.now() + 7200000, iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }] })
   const stream = (audio = true) => {
     const tracks = [new FakeTrack('video', 'screen'), ...(audio ? [new FakeTrack('audio', 'system-audio')] : [])]
-    return { tracks, media: { getTracks: () => tracks, getVideoTracks: () => tracks.filter((t) => t.kind === 'video') } as unknown as MediaStream }
+    return { tracks, media: { getTracks: () => tracks, getVideoTracks: () => tracks.filter((t) => t.kind === 'video'), getAudioTracks: () => tracks.filter((t) => t.kind === 'audio') } as unknown as MediaStream }
   }
   return {
     service, presence, calls, states, snapshots, connect, stream,
@@ -117,7 +119,7 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     await service.publishScreen(capture.media, 'smooth')
     expect(calls.find((c) => c.path === 'tracks')!.body).toMatchObject({
       sessionDescription: { type: 'offer' },
-      tracks: [{ location: 'local', kind: 'video', mid: '0' }, { location: 'local', kind: 'audio', mid: '1' }],
+      tracks: [{ location: 'local', kind: 'video', source: 'screen-video', mid: '0' }, { location: 'local', kind: 'audio', source: 'screen-audio', mid: '1' }],
     })
     await service.unpublishScreen()
     expect(calls[calls.length - 1]).toEqual({ path: 'tracks/close', body: { mids: ['0', '1'] } })
@@ -127,9 +129,26 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     expect(calls.filter((c) => c.path === 'tracks/close')).toHaveLength(1)
   })
 
+  it('keeps microphone and screen lifecycles independent', async () => {
+    const { connect, service, calls, stream } = setup()
+    await connect()
+    const microphone = new FakeTrack('audio', 'microphone')
+    await service.publishMicrophone(microphone as unknown as MediaStreamTrack)
+    const capture = stream(true)
+    await service.publishScreen(capture.media, 'smooth')
+    expect((calls.filter((c) => c.path === 'tracks')[0]!.body.tracks as { source: string }[]).map((t) => t.source)).toEqual(['microphone'])
+    expect((calls.filter((c) => c.path === 'tracks')[1]!.body.tracks as { source: string }[]).map((t) => t.source)).toEqual(['screen-video', 'screen-audio'])
+    await service.unpublishScreen()
+    expect(microphone.readyState).toBe('live')
+    expect(calls[calls.length - 1]).toEqual({ path: 'tracks/close', body: { mids: ['1', '2'] } })
+    await service.unpublishMicrophone()
+    expect(microphone.readyState).toBe('ended')
+    expect(calls[calls.length - 1]).toEqual({ path: 'tracks/close', body: { mids: ['0'] } })
+  })
+
   it('receives first with an SFU offer, answers, groups audio/video and removes stopped shares', async () => {
     const { connect, calls, presence, snapshots } = setup()
-    presence.tracks = ['video', 'audio'].map((kind) => ({ sessionId: 'publisher-session', trackName: kind, kind, participantIdentity: 'remote', participantName: 'Remote' }))
+    presence.tracks = [{ kind: 'video', source: 'screen-video' as const }, { kind: 'audio', source: 'screen-audio' as const }].map(({ kind, source }) => ({ sessionId: 'publisher-session', trackName: kind, kind, source, participantIdentity: 'remote', participantName: 'Remote' }))
     await connect()
     expect(calls.find((c) => c.path === 'tracks')!.body).not.toHaveProperty('sessionDescription')
     expect(calls.find((c) => c.path === 'renegotiate')!.body).toEqual({ sessionDescription: { type: 'answer', sdp: 'answer-sdp' } })
@@ -181,7 +200,7 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     failNextPoll(401)
     await vi.advanceTimersByTimeAsync(3000)
     expect(capture.tracks[0]!.readyState).toBe('ended')
-    expect(snapshots[snapshots.length - 1]).toEqual({ participants: [], shares: [] })
+    expect(snapshots[snapshots.length - 1]).toEqual({ participants: [], shares: [], remoteVoiceTracks: [] })
     expect(states[states.length - 1]).toBe('disconnected')
   })
 

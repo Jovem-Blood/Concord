@@ -19,7 +19,7 @@ Sem Docker: `pnpm dev:server` carrega o `.env` da raiz; em outro terminal, execu
 2. Opcionalmente execute `./scripts/setup-self-host.sh concord.example.com` para preparar arquivos novos. O script recusa sobrescrever arquivos existentes; `--force` substitui ambos e apaga suas credenciais anteriores.
 3. Preencha as credenciais SFU no `.env`. Copie `infra/Caddyfile.example` para `infra/Caddyfile` e ajuste o domínio.
 4. Na raiz do projeto, execute `docker compose -f docker-compose.production.yml up -d --build`.
-5. Configure `VITE_TOKEN_SERVER_URL` e `VITE_WEB_APP_URL` em `apps/desktop/.env.local` e execute `pnpm make` para atualizar os clientes Windows.
+5. Configure `VITE_TOKEN_SERVER_URL` e `VITE_WEB_APP_URL` em `apps/desktop/.env.local` e execute `pnpm make` com Node 24 LTS para um build local. Releases oficiais são gerados por tags `vX.Y.Z`; o workflow injeta `https://concord.opeixoto.com` nos clientes Windows e Linux.
 
 Somente o Caddy publica portas de entrada `80/TCP`, `443/TCP` e, opcionalmente, `443/UDP` para HTTP/3. As portas `3001` e `4173` ficam em loopback. A API precisa de saída HTTPS para `rtc.live.cloudflare.com`; os clientes precisam alcançar a rede WebRTC da Cloudflare. Não é necessário encaminhar portas do roteador para mídia.
 

@@ -1,0 +1,67 @@
+name: Bug report
+description: Report a reproducible problem in Concord
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve Concord. Remove credentials, room tokens, captured media, and personal information before submitting.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Release version or commit hash
+      placeholder: v0.1.0 or abc1234
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: Client
+      options:
+        - Web
+        - Windows desktop
+        - Linux desktop
+        - Token server
+        - Docker or production deployment
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the observed and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create a room
+        2. Share a window
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, browser, Node.js version, and relevant network details.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or screenshots
+      description: Optional. Do not include secrets or private content.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, tokens, captured media, and personal information.
+          required: true
+        - label: This is not a security vulnerability. I will use GitHub Security Advisories for security reports.
+          required: true

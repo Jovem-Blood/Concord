@@ -12,10 +12,15 @@ export type SfuResponse = {
   sessionDescription?: SessionDescription
   requiresImmediateRenegotiation?: boolean
   tracks?: SfuTrack[]
+  dataChannel?: SfuDataChannel
+  dataChannels?: SfuDataChannel[]
+}
+export type SfuDataChannel = {
+  id?: number; location?: 'local' | 'remote'; sessionId?: string; dataChannelName?: string; errorCode?: string
 }
 export type SfuClient = {
   createSession(): Promise<SfuResponse>
-  request(sessionId: string, operation: 'tracks/new' | 'tracks/close' | 'renegotiate', body: unknown): Promise<SfuResponse>
+  request(sessionId: string, operation: 'tracks/new' | 'tracks/close' | 'renegotiate' | 'datachannels/establish' | 'datachannels/new' | 'datachannels/close', body: unknown): Promise<SfuResponse>
 }
 
 export function createSfuClient(
@@ -40,7 +45,7 @@ export function createSfuClient(
     createSession: () => request('sessions/new', 'POST'),
     request: (sessionId, operation, body) => request(
       `sessions/${encodeURIComponent(sessionId)}/${operation}`,
-      operation === 'tracks/new' ? 'POST' : 'PUT', body,
+      operation.endsWith('/new') || operation.endsWith('/establish') ? 'POST' : 'PUT', body,
     ),
   }
 }

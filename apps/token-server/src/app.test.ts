@@ -17,7 +17,10 @@ async function fixture(turn?: () => Promise<{ urls: string[] }[]>) {
     createSession: vi.fn(async () => ({ sessionId: `session-${++sessionNumber}` })),
     request: vi.fn(async (_session, operation, body) => {
       const tracks = (body as { tracks?: SfuTrack[] }).tracks
+      const dataChannels = (body as { dataChannels?: { location: 'local' | 'remote'; sessionId?: string; dataChannelName: string }[] }).dataChannels
       return { tracks: tracks?.map((t, i) => ({ ...t, mid: t.mid ?? `remote-${i}` })),
+        dataChannels: dataChannels?.map((channel, i) => ({ ...channel, id: i + 1 })),
+        ...(operation === 'datachannels/establish' ? { dataChannel: { id: 0 }, sessionDescription: { type: 'answer' as const, sdp: 'answer-sdp' } } : {}),
         ...(operation === 'tracks/new' ? { sessionDescription: { type: 'answer' as const, sdp: 'answer-sdp' } } : {}) }
     }),
   }
@@ -33,7 +36,7 @@ async function fixture(turn?: () => Promise<{ urls: string[] }[]>) {
     const session = await app.inject({ method: 'POST', url: '/v1/session', headers })
     const response = await app.inject({ method: 'POST', url: '/v1/tracks', headers, payload: {
       sessionDescription: { type: 'offer', sdp: 'offer-sdp' },
-      tracks: [{ location: 'local', mid: '0', trackName: 'screen', kind: 'video' }],
+      tracks: [{ location: 'local', mid: '0', trackName: 'screen', kind: 'video', source: 'screen-video' }],
     } })
     expect(response.statusCode).toBe(200)
     return session.json().sessionId as string
@@ -50,7 +53,7 @@ describe('Cloudflare room signaling', () => {
     expect(data.expiresAt).toBeGreaterThan(Date.now())
     expect(sfu.createSession).not.toHaveBeenCalled()
     const room = await app.inject({ method: 'GET', url: '/v1/room', headers })
-    expect(room.json().participants).toEqual([{ identity: data.identity, name: 'Thiago' }])
+    expect(room.json().participants).toEqual([{ identity: data.identity, name: 'Thiago', voice: { available: false } }])
     expect(room.headers['cache-control']).toBe('no-store')
   })
 
@@ -130,7 +133,7 @@ describe('Cloudflare room signaling', () => {
     await app.inject({ method: 'POST', url: '/v1/session', headers: a.headers })
     vi.mocked(sfu.request).mockResolvedValueOnce({ tracks: [{ mid: '0', trackName: 'screen', errorCode: 'track_error' }] })
     await app.inject({ method: 'POST', url: '/v1/tracks', headers: a.headers, payload: {
-      sessionDescription: { type: 'offer', sdp: 'sdp' }, tracks: [{ location: 'local', mid: '0', trackName: 'screen', kind: 'video' }],
+      sessionDescription: { type: 'offer', sdp: 'sdp' }, tracks: [{ location: 'local', mid: '0', trackName: 'screen', kind: 'video', source: 'screen-video' }],
     } })
     expect((await app.inject({ method: 'GET', url: '/v1/room', headers: a.headers })).json().tracks).toEqual([])
   })
@@ -160,6 +163,52 @@ describe('Cloudflare room signaling', () => {
     const { app, join } = await fixture()
     const { headers } = await join()
     for (let i = 0; i < 65; i++) expect((await app.inject({ method: 'GET', url: '/v1/room', headers })).statusCode).toBe(200)
+  })
+
+  it('validates media source compatibility and permits microphone with screen audio', async () => {
+    const { app, join } = await fixture()
+    const a = await join()
+    await app.inject({ method: 'POST', url: '/v1/session', headers: a.headers })
+    const publish = (tracks: unknown[]) => app.inject({ method: 'POST', url: '/v1/tracks', headers: a.headers, payload: {
+      sessionDescription: { type: 'offer', sdp: 'offer-sdp' }, tracks,
+    } })
+    expect((await publish([{ location: 'local', mid: '0', trackName: 'bad', kind: 'video', source: 'microphone' }])).statusCode).toBe(400)
+    const ok = await publish([
+      { location: 'local', mid: '0', trackName: 'voice', kind: 'audio', source: 'microphone' },
+      { location: 'local', mid: '1', trackName: 'screen', kind: 'video', source: 'screen-video' },
+      { location: 'local', mid: '2', trackName: 'system', kind: 'audio', source: 'screen-audio' },
+    ])
+    expect(ok.statusCode).toBe(200)
+    expect((await app.inject({ method: 'GET', url: '/v1/room', headers: a.headers })).json()).toMatchObject({
+      participants: [{ voice: { available: true } }],
+      tracks: expect.arrayContaining([expect.objectContaining({ source: 'microphone' }), expect.objectContaining({ source: 'screen-audio' })]),
+    })
+    expect((await publish([{ location: 'local', mid: '3', trackName: 'voice-2', kind: 'audio', source: 'microphone' }])).statusCode).toBe(400)
+  })
+
+  it('authorizes room-scoped chat channels and never accepts message content', async () => {
+    const { app, join, sfu } = await fixture()
+    const alice = await join('ABCD2345', 'Alice')
+    const bob = await join('ABCD2345', 'Bob')
+    const outsider = await join('WXYZ2345', 'Outsider')
+    for (const user of [alice, bob, outsider]) {
+      await app.inject({ method: 'POST', url: '/v1/session', headers: user.headers })
+      expect((await app.inject({ method: 'POST', url: '/v1/chat/establish', headers: user.headers, payload: {
+        sessionDescription: { type: 'offer', sdp: 'v=0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel' },
+      } })).statusCode).toBe(200)
+    }
+    expect((await app.inject({ method: 'POST', url: '/v1/chat/channels', headers: alice.headers, payload: {
+      location: 'local', dataChannelName: 'forged', content: '<b>secret</b>', participantIdentity: 'forged',
+    } })).statusCode).toBe(200)
+    const aliceSession = (await app.inject({ method: 'GET', url: '/v1/room', headers: bob.headers })).json().channels[0].sessionId
+    expect((await app.inject({ method: 'POST', url: '/v1/chat/channels', headers: bob.headers,
+      payload: { location: 'remote', sessionId: aliceSession, canReply: true } })).statusCode).toBe(200)
+    expect(sfu.request).toHaveBeenLastCalledWith('session-2', 'datachannels/new', { dataChannels: [{
+      location: 'remote', dataChannelName: 'concord-chat', ordered: true, sessionId: aliceSession, waitForAck: true, canReply: false,
+    }] })
+    expect((await app.inject({ method: 'POST', url: '/v1/chat/channels', headers: outsider.headers,
+      payload: { location: 'remote', sessionId: aliceSession } })).statusCode).toBe(403)
+    expect(JSON.stringify((await app.inject({ method: 'GET', url: '/v1/room', headers: bob.headers })).json())).not.toContain('secret')
   })
 
   it('serializes concurrent session mutations', async () => {

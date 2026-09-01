@@ -7,6 +7,18 @@ Repita os cenários misturando os clientes: Electron → web, web → Electron e
 ## Fluxos obrigatórios
 
 - [ ] A cria a sala, B entra e ambos aparecem na lista.
+- [ ] B entra sem ativar o microfone, ouve A e usa o chat sem receber pedido de permissão.
+- [ ] A ativa o microfone e B ouve; o indicador **Falando** reage à voz e deixa de reagir após o silêncio.
+- [ ] Mutar A interrompe a voz imediatamente, sem nova negociação e sem parar a tela ativa.
+- [ ] **Silenciar áudio da sala** em B cala voz e áudio de sistema recebidos, sem mutar o microfone de B.
+- [ ] Negar, desconectar e ocupar o microfone mostra uma mensagem acionável; tela, áudio recebido e chat continuam disponíveis.
+- [ ] Parar a tela mantém o microfone ativo; desligar o microfone mantém a tela e o áudio de sistema ativos.
+- [ ] Com voz e áudio do sistema ativos, aparece o aviso de possível retorno da conversa.
+- [ ] A e B abrem o chat; novas mensagens chegam com remetente correto e sem HTML renderizado.
+- [ ] Enter envia, Shift+Enter cria linha; mensagens acima de 2.000 caracteres não são enviadas.
+- [ ] Chat fechado acumula não lidas; abrir zera o contador.
+- [ ] B entra depois de uma mensagem e não recebe histórico anterior.
+- [ ] Recarregar, sair ou reconectar limpa imediatamente todas as mensagens.
 - [ ] Abrir `https://SEU_HOST/CODIGO` no navegador exibe o convite correto.
 - [ ] **Copiar link** produz uma URL que abre a mesma sala em outro computador.
 - [ ] A compartilha o monitor; B recebe vídeo; A para; o vídeo some em B.
@@ -17,6 +29,7 @@ Repita os cenários misturando os clientes: Electron → web, web → Electron e
 - [ ] Entrar em outra sala não mostra participantes ou telas da primeira.
 - [ ] A rede é interrompida brevemente; a interface mostra reconexão e volta sem reiniciar.
 - [ ] Após reconectar, uma captura ainda ativa é republicada e as telas remotas voltam.
+- [ ] Após reconectar, microfone e tela ativos voltam uma vez, sem áudio duplicado; mute continua aplicado.
 - [ ] Fechar o cliente sem sair remove sua presença em até dois minutos, mais o intervalo de atualização.
 - [ ] Reiniciar a API encerra o acesso anterior e para a captura local; entrar novamente funciona.
 - [ ] Cancelar o seletor não mostra erro e permite tentar novamente.
@@ -38,7 +51,7 @@ Teste `1080p15` e `1080p30`, anotando:
 | Tempo até o primeiro frame | | |
 | Reconexões | | |
 
-O teste fora da mesma LAN é obrigatório antes de distribuir o MVP.
+O teste fora da mesma LAN é obrigatório antes de distribuir o MVP. Execute também web ↔ web, Electron ↔ web e uma sala com pelo menos três participantes.
 
 ## Cloudflare SFU
 
