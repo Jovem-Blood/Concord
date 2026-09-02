@@ -124,9 +124,9 @@ Run `./scripts/setup-self-host.sh concord.example.com` to prepare new environmen
 | `/health`, `/v1/*` | `http://127.0.0.1:3001` |
 | All other routes | `http://127.0.0.1:4173` |
 
-Do not cache `/v1/*`. If the tunnel does not support path-based routing, use a separate API hostname and set `PUBLIC_TOKEN_SERVER_URL` before building. `ALLOWED_ORIGINS` must include the public web origin. A tunnel running in a container can join the Compose network and use `http://token-server:3001` and `http://web:4173` directly.
+Do not cache `/v1/*`. If the tunnel does not support path-based routing, use a separate API hostname and set `PUBLIC_SERVER_URL` before building. `ALLOWED_ORIGINS` must include the public web origin. A tunnel running in a container can join the Compose network and use `http://server:3001` and `http://web:4173` directly.
 
-Run exactly one `token-server` instance: room presence, tokens, and publications are kept in memory, and restarting it ends the active room sessions.
+Run exactly one `server` instance: room presence, tokens, and publications are kept in memory, and restarting it ends the active room sessions.
 
 ## Configuration
 
@@ -137,8 +137,8 @@ Run exactly one `token-server` instance: room presence, tokens, and publications
 | `ALLOWED_ORIGINS` | Comma-separated web origins accepted by the API |
 | `PORT` | API port; defaults to `3001` |
 | `PUBLIC_APP_URL` | Public web URL used by Docker Compose |
-| `PUBLIC_TOKEN_SERVER_URL` | Public API URL embedded in the Compose web build |
-| `VITE_TOKEN_SERVER_URL` | API URL embedded in the client |
+| `PUBLIC_SERVER_URL` | Public API URL embedded in the Compose web build |
+| `VITE_SERVER_URL` | API URL embedded in the client |
 | `VITE_WEB_APP_URL` | Base URL used by desktop invite links |
 
 Concord uses Cloudflare STUN and does not configure a TURN relay. Networks that require relay connectivity are therefore unsupported. Web capture audio availability depends on the browser, operating system, and selected source; video continues with a warning when audio is unavailable.
@@ -153,7 +153,7 @@ pnpm build
 pnpm make
 ```
 
-The web build is written to `apps/desktop/dist-web`. `pnpm make` builds release artifacts for the current operating system and requires Node.js 22.12 through 24.x; Node.js 24 LTS is recommended.
+The web build is written to `apps/client/dist-web`. `pnpm make` builds release artifacts for the current operating system and requires Node.js 22.12 through 24.x; Node.js 24 LTS is recommended.
 
 Useful project references:
 
@@ -164,7 +164,7 @@ Useful project references:
 
 ## Releases
 
-SemVer tags such as `v0.1.0` trigger `.github/workflows/release.yml`. The tag must match `apps/desktop/package.json` and point to a commit contained in `main`. The workflow verifies the project, builds Windows and Linux artifacts, generates SHA-256 checksums, and publishes a GitHub Release.
+SemVer tags such as `v0.1.0` trigger `.github/workflows/release.yml`. The tag must match `apps/client/package.json` and point to a commit contained in `main`. The workflow verifies the project, builds Windows and Linux artifacts, generates SHA-256 checksums, and publishes a GitHub Release.
 
 ## Privacy and security
 

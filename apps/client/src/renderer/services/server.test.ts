@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { requestJoinToken } from './token'
+import { requestJoinToken } from './server'
 
 afterEach(() => vi.unstubAllGlobals())
 
 describe('requestJoinToken', () => {
-  it('accepts room credentials from the token server', async () => {
+  it('accepts room credentials from the server', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       identity: 'participant-id',
       expiresAt: 4102444800000,

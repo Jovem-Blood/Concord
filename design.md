@@ -7,7 +7,7 @@ This document describes the design that Concord uses today. It is a durable desi
 Use these sources in this order:
 
 1. `design.pen` defines brand foundations, visual direction, reusable component intent, and logo explorations.
-2. `apps/desktop/src/renderer/styles.css` defines the shipped layout, responsive behavior, and contextual component adaptations.
+2. `apps/client/src/renderer/styles.css` defines the shipped layout, responsive behavior, and contextual component adaptations.
 3. Vue components define product behavior, state, accessibility semantics, and final UI copy.
 
 When they appear to differ, preserve the visual intent from `design.pen` and use the CSS behavior appropriate to the actual viewport. Update this guide only for enduring rules.

@@ -23,7 +23,7 @@ body:
         - Web
         - Windows desktop
         - Linux desktop
-        - Token server
+        - Server
         - Docker or production deployment
     validations:
       required: true

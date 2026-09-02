@@ -1,6 +1,6 @@
 import { AppError } from '../../../shared/errors'
 import type { CaptureProfile } from '../../../shared/capture'
-import { tokenServerUrl, type JoinResponse } from '../token'
+import { serverUrl, type JoinResponse } from '../server'
 import type { MediaSource, PublishedTrack, RemoteShareView, RemoteVoiceTrack, RoomPresence, RoomSnapshot, SfuResponse } from './types'
 import { EphemeralChat, validChatContent, type ChatSnapshot } from '../chat'
 import { ChatTransport } from './chat-transport'
@@ -149,7 +149,7 @@ export class CloudflareRoomService {
     this.emitSnapshot()
     await this.queue.catch(() => undefined)
     if (credentials) {
-      await fetch(`${tokenServerUrl}/v1/leave`, {
+      await fetch(`${serverUrl}/v1/leave`, {
         method: 'POST', headers: { authorization: `Bearer ${credentials.participantToken}` },
         keepalive: true, signal: AbortSignal.timeout(5_000),
       }).catch(() => undefined)
@@ -170,7 +170,7 @@ export class CloudflareRoomService {
     const credentials = this.credentials
     const generation = this.generation
     if (!credentials) throw new SignalingError(401)
-    const response = await fetch(`${tokenServerUrl}/v1/${path}`, {
+    const response = await fetch(`${serverUrl}/v1/${path}`, {
       method: path === 'room' ? 'GET' : 'POST',
       headers: {
         authorization: `Bearer ${credentials.participantToken}`,

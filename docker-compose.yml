@@ -1,10 +1,10 @@
-name: infra
+name: concord
 
 services:
-  token-server:
+  server:
     build:
       context: .
-      dockerfile: apps/token-server/Dockerfile
+      dockerfile: apps/server/Dockerfile
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -18,12 +18,12 @@ services:
   web:
     build:
       context: .
-      dockerfile: apps/desktop/Dockerfile.web
+      dockerfile: apps/client/Dockerfile.web
       args:
-        VITE_TOKEN_SERVER_URL: ${PUBLIC_TOKEN_SERVER_URL:-http://localhost:3001}
+        VITE_SERVER_URL: ${PUBLIC_SERVER_URL:-http://localhost:3001}
         VITE_WEB_APP_URL: ${PUBLIC_APP_URL:-http://localhost:4173}
     restart: unless-stopped
     depends_on:
-      - token-server
+      - server
     ports:
       - "127.0.0.1:4173:4173/tcp"

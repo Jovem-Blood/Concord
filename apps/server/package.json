@@ -1,5 +1,5 @@
 {
-  "name": "@concord/token-server",
+  "name": "@concord/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",

@@ -124,9 +124,9 @@ Execute `./scripts/setup-self-host.sh concord.example.com` para preparar novos a
 | `/health`, `/v1/*` | `http://127.0.0.1:3001` |
 | Demais rotas | `http://127.0.0.1:4173` |
 
-Não faça cache de `/v1/*`. Se o túnel não aceitar regras por caminho, use um hostname separado para a API e defina `PUBLIC_TOKEN_SERVER_URL` antes do build. `ALLOWED_ORIGINS` deve incluir a origem pública do web. Um túnel executado em contêiner pode entrar na rede do Compose e acessar diretamente `http://token-server:3001` e `http://web:4173`.
+Não faça cache de `/v1/*`. Se o túnel não aceitar regras por caminho, use um hostname separado para a API e defina `PUBLIC_SERVER_URL` antes do build. `ALLOWED_ORIGINS` deve incluir a origem pública do web. Um túnel executado em contêiner pode entrar na rede do Compose e acessar diretamente `http://server:3001` e `http://web:4173`.
 
-Execute exatamente uma instância de `token-server`: presença, tokens e publicações ficam em memória, e reiniciá-la encerra as sessões de sala ativas.
+Execute exatamente uma instância de `server`: presença, tokens e publicações ficam em memória, e reiniciá-la encerra as sessões de sala ativas.
 
 ## Configuração
 
@@ -137,8 +137,8 @@ Execute exatamente uma instância de `token-server`: presença, tokens e publica
 | `ALLOWED_ORIGINS` | Origens web aceitas pela API, separadas por vírgula |
 | `PORT` | Porta da API; padrão `3001` |
 | `PUBLIC_APP_URL` | URL pública do web usada pelo Docker Compose |
-| `PUBLIC_TOKEN_SERVER_URL` | URL pública da API incorporada ao build web do Compose |
-| `VITE_TOKEN_SERVER_URL` | URL da API incorporada ao cliente |
+| `PUBLIC_SERVER_URL` | URL pública da API incorporada ao build web do Compose |
+| `VITE_SERVER_URL` | URL da API incorporada ao cliente |
 | `VITE_WEB_APP_URL` | URL-base usada nos convites copiados pelo desktop |
 
 O Concord usa STUN da Cloudflare e não configura relay TURN. Portanto, redes que exigem relay não são suportadas. A disponibilidade de áudio na captura web depende do navegador, sistema operacional e fonte escolhida; quando o áudio não está disponível, o vídeo continua com um aviso.
@@ -153,7 +153,7 @@ pnpm build
 pnpm make
 ```
 
-O build web fica em `apps/desktop/dist-web`. `pnpm make` gera artefatos de release para o sistema operacional atual e exige Node.js 22.12 a 24.x; Node.js 24 LTS é recomendado.
+O build web fica em `apps/client/dist-web`. `pnpm make` gera artefatos de release para o sistema operacional atual e exige Node.js 22.12 a 24.x; Node.js 24 LTS é recomendado.
 
 Referências úteis do projeto:
 
@@ -164,7 +164,7 @@ Referências úteis do projeto:
 
 ## Releases
 
-Tags SemVer como `v0.1.0` executam `.github/workflows/release.yml`. A tag deve corresponder a `apps/desktop/package.json` e apontar para um commit presente em `main`. O workflow verifica o projeto, cria os artefatos de Windows e Linux, gera checksums SHA-256 e publica uma GitHub Release.
+Tags SemVer como `v0.1.0` executam `.github/workflows/release.yml`. A tag deve corresponder a `apps/client/package.json` e apontar para um commit presente em `main`. O workflow verifica o projeto, cria os artefatos de Windows e Linux, gera checksums SHA-256 e publica uma GitHub Release.
 
 ## Privacidade e segurança
 

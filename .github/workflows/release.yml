@@ -14,7 +14,7 @@ concurrency:
 
 env:
   CI: true
-  VITE_TOKEN_SERVER_URL: https://concord.opeixoto.com
+  VITE_SERVER_URL: https://concord.opeixoto.com
   VITE_WEB_APP_URL: https://concord.opeixoto.com
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
           cache: pnpm
       - name: Verify release tag
         run: |
-          node -e "const p = require('./apps/desktop/package.json'); if (process.env.GITHUB_REF_NAME !== 'v' + p.version) throw new Error('Tag must equal v' + p.version)"
+          node -e "const p = require('./apps/client/package.json'); if (process.env.GITHUB_REF_NAME !== 'v' + p.version) throw new Error('Tag must equal v' + p.version)"
           git fetch origin main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - run: pnpm install --frozen-lockfile
@@ -72,11 +72,11 @@ jobs:
           sudo apt-get install --yes zip
       - run: pnpm install --frozen-lockfile
       - name: Build ${{ matrix.platform }} release assets
-        run: pnpm --filter @concord/desktop ${{ matrix.script }}
+        run: pnpm --filter @concord/client ${{ matrix.script }}
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.platform }}
-          path: apps/desktop/out/release-assets/${{ matrix.platform }}/*
+          path: apps/client/out/release-assets/${{ matrix.platform }}/*
           if-no-files-found: error
           retention-days: 7
 

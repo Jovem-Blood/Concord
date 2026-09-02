@@ -6,18 +6,18 @@ export type JoinResponse = {
   expiresAt: number
 }
 
-export const tokenServerUrl = (import.meta.env.VITE_TOKEN_SERVER_URL ?? 'http://localhost:3001').replace(/\/$/, '')
+export const serverUrl = (import.meta.env.VITE_SERVER_URL ?? 'http://localhost:3001').replace(/\/$/, '')
 
 export async function requestJoinToken(roomCode: string, displayName: string): Promise<JoinResponse> {
   try {
-    const response = await fetch(`${tokenServerUrl}/v1/join`, {
+    const response = await fetch(`${serverUrl}/v1/join`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ roomCode, displayName }),
       signal: AbortSignal.timeout(15_000),
     })
 
-    if (!response.ok) throw new Error(`Token server responded with ${response.status}`)
+    if (!response.ok) throw new Error(`Server responded with ${response.status}`)
 
     const result = (await response.json()) as Partial<JoinResponse>
     if (typeof result.participantToken !== 'string' || !result.participantToken ||

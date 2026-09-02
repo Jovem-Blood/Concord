@@ -21,7 +21,7 @@ import { writeClipboard } from './services/clipboard'
 import { CloudflareRoomService } from './services/cloudflare/room'
 import type { ChatSnapshot } from './services/chat'
 import type { ParticipantView, RemoteShareView } from './services/cloudflare/types'
-import { requestJoinToken } from './services/token'
+import { requestJoinToken } from './services/server'
 
 const roomService = new CloudflareRoomService()
 const voiceControls = useVoice(roomService)

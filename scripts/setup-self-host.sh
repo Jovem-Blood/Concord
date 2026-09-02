@@ -47,15 +47,15 @@ fi
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
 server_env="$project_root/.env"
-desktop_env="$project_root/apps/desktop/.env.local"
-if [ "$force" = false ] && { [ -e "$server_env" ] || [ -e "$desktop_env" ]; }; then
+client_env="$project_root/apps/client/.env.local"
+if [ "$force" = false ] && { [ -e "$server_env" ] || [ -e "$client_env" ]; }; then
   printf 'Refusing to overwrite existing environment files. Use --force only to replace both.\n' >&2
   exit 1
 fi
 umask 077
 server_tmp="$server_env.tmp.$$"
-desktop_tmp="$desktop_env.tmp.$$"
-cleanup() { rm -f "$server_tmp" "$desktop_tmp"; }
+client_tmp="$client_env.tmp.$$"
+cleanup() { rm -f "$server_tmp" "$client_tmp"; }
 trap cleanup EXIT HUP INT TERM
 cat >"$server_tmp" <<EOF
 # Fill with credentials from Cloudflare > Realtime > Serverless SFU. Keep private.
@@ -64,15 +64,15 @@ CLOUDFLARE_SFU_APP_SECRET=
 PORT=3001
 ALLOWED_ORIGINS=https://$api_host
 PUBLIC_APP_URL=https://$api_host
-PUBLIC_TOKEN_SERVER_URL=https://$api_host
+PUBLIC_SERVER_URL=https://$api_host
 EOF
-cat >"$desktop_tmp" <<EOF
+cat >"$client_tmp" <<EOF
 # Rebuild clients after changing these URLs. Never put SFU secrets here.
-VITE_TOKEN_SERVER_URL=https://$api_host
+VITE_SERVER_URL=https://$api_host
 VITE_WEB_APP_URL=https://$api_host
 EOF
 mv "$server_tmp" "$server_env"
-mv "$desktop_tmp" "$desktop_env"
+mv "$client_tmp" "$client_env"
 trap - EXIT HUP INT TERM
-printf 'Prepared .env and apps/desktop/.env.local for https://%s\n' "$api_host"
+printf 'Prepared .env and apps/client/.env.local for https://%s\n' "$api_host"
 printf 'Next: fill SFU credentials, configure HTTPS, start Compose and rebuild clients.\n'

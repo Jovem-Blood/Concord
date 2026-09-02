@@ -4,16 +4,16 @@
   "private": true,
   "packageManager": "pnpm@10.15.0",
   "scripts": {
-    "dev": "pnpm --parallel --filter @concord/desktop --filter @concord/token-server dev",
-    "dev:desktop": "pnpm --filter @concord/desktop dev",
-    "dev:web": "pnpm --filter @concord/desktop dev:web",
-    "dev:server": "pnpm --filter @concord/token-server dev",
+    "dev": "pnpm --parallel --filter @concord/client --filter @concord/server dev",
+    "dev:desktop": "pnpm --filter @concord/client dev",
+    "dev:web": "pnpm --filter @concord/client dev:web",
+    "dev:server": "pnpm --filter @concord/server dev",
     "build": "pnpm -r build && pnpm build:web",
-    "build:web": "pnpm --filter @concord/desktop build:web",
+    "build:web": "pnpm --filter @concord/client build:web",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
-    "make": "pnpm --filter @concord/desktop make"
+    "make": "pnpm --filter @concord/client make"
   },
   "engines": {
     "node": ">=22.12.0"

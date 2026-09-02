@@ -2,7 +2,7 @@
 .git
 .env
 apps/*/dist
-apps/desktop/.vite
-apps/desktop/out
-apps/desktop/dist-web
+apps/client/.vite
+apps/client/out
+apps/client/dist-web
 coverage

@@ -9,7 +9,7 @@ out/
 coverage/
 *.log
 *.local
-apps/desktop/.vite/
-apps/desktop/out/
-apps/desktop/dist-web/
-apps/token-server/dist/
+apps/client/.vite/
+apps/client/out/
+apps/client/dist-web/
+apps/server/dist/
