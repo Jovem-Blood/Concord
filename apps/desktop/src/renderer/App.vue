@@ -9,6 +9,7 @@ import ChatPanel from './components/ChatPanel.vue'
 import MediaTile from './components/MediaTile.vue'
 import ParticipantList from './components/ParticipantList.vue'
 import RemoteVoiceAudio from './components/RemoteVoiceAudio.vue'
+import SiteFooter from './components/SiteFooter.vue'
 import SourcePicker from './components/SourcePicker.vue'
 import { useVoice } from './composables/useVoice'
 import { stopMediaStream } from './domain/capture-cleanup'
@@ -16,6 +17,7 @@ import { createRoomLink, roomCodeFromRoute } from './domain/room-link'
 import { generateRoomCode, isValidRoomCode, normalizeRoomCode } from './domain/room-code'
 import type { RoomState, ShareState } from './domain/state'
 import { captureProvider } from './services/capture/provider'
+import { writeClipboard } from './services/clipboard'
 import { CloudflareRoomService } from './services/cloudflare/room'
 import type { ChatSnapshot } from './services/chat'
 import type { ParticipantView, RemoteShareView } from './services/cloudflare/types'
@@ -199,28 +201,14 @@ async function startSharing(
     await stopSharing()
     if (error instanceof DOMException && error.name === 'NotAllowedError') {
       shareState.value = 'idle'
+      if (captureEnvironment === 'electron') {
+        errorMessage.value = 'O aplicativo não conseguiu iniciar a captura da fonte selecionada.'
+      }
       return
     }
     shareState.value = 'error'
     errorMessage.value = getErrorMessage(error)
   }
-}
-
-async function writeClipboard(value: string): Promise<void> {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value)
-    return
-  }
-
-  const textarea = document.createElement('textarea')
-  textarea.value = value
-  textarea.style.position = 'fixed'
-  textarea.style.opacity = '0'
-  document.body.appendChild(textarea)
-  textarea.select()
-  const copiedSuccessfully = document.execCommand('copy')
-  textarea.remove()
-  if (!copiedSuccessfully) throw new Error('Clipboard unavailable')
 }
 
 function stopSharing(): Promise<void> {
@@ -313,6 +301,7 @@ onBeforeUnmount(() => {
         </div>
       </section>
     </section>
+    <SiteFooter v-if="captureEnvironment === 'web'" />
   </main>
 
   <div v-else class="app-shell" :inert="shareState === 'selecting'">
