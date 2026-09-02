@@ -2,6 +2,7 @@ import { app, BrowserWindow, session } from 'electron'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { registerCaptureHandlers } from './capture'
+import { registerClipboardHandlers } from './clipboard'
 import { microphonePermission, trustedRendererUrl } from './permissions'
 import { startAutoUpdates } from './updater'
 
@@ -10,6 +11,7 @@ declare const MAIN_WINDOW_VITE_NAME: string
 
 let mainWindow: BrowserWindow | null = null
 let disposeCaptureHandlers: (() => void) | null = null
+let disposeClipboardHandlers: (() => void) | null = null
 
 function isTrustedRendererUrl(url: string): boolean {
   return trustedRendererUrl(url, rendererUrl())
@@ -41,6 +43,7 @@ function createMainWindow(): void {
 
   const appSession = mainWindow.webContents.session
   disposeCaptureHandlers = registerCaptureHandlers(mainWindow, appSession)
+  disposeClipboardHandlers = registerClipboardHandlers(mainWindow)
 
   appSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(webContents === mainWindow?.webContents && microphonePermission(permission,
@@ -60,6 +63,8 @@ function createMainWindow(): void {
   mainWindow.on('closed', () => {
     disposeCaptureHandlers?.()
     disposeCaptureHandlers = null
+    disposeClipboardHandlers?.()
+    disposeClipboardHandlers = null
     mainWindow = null
   })
 

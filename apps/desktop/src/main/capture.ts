@@ -1,12 +1,18 @@
-import { desktopCapturer, ipcMain, type BrowserWindow, type Session } from 'electron'
+import { desktopCapturer, ipcMain, type BrowserWindow, type Session, type WebFrameMain } from 'electron'
 import type { CaptureSelection, CaptureSourceDTO } from '../shared/capture'
 
 const SELECTION_TTL_MS = 10_000
 const MAX_SOURCE_ID_LENGTH = 512
 
 type PendingSelection = CaptureSelection & { expiresAt: number }
+type FrameIdentity = Pick<WebFrameMain, 'processId' | 'routingId'>
 
 const pendingSelections = new Map<number, PendingSelection>()
+
+function isMainFrameForRenderer(frame: WebFrameMain | null, rendererFrame: FrameIdentity): boolean {
+  if (!frame || frame.parent !== null) return false
+  return frame.processId === rendererFrame.processId && frame.routingId === rendererFrame.routingId
+}
 
 function isCaptureSelection(value: unknown): value is CaptureSelection {
   if (!value || typeof value !== 'object') return false
@@ -40,7 +46,10 @@ async function loadSources(): Promise<CaptureSourceDTO[]> {
 export function registerCaptureHandlers(mainWindow: BrowserWindow, appSession: Session): () => void {
   const renderer = mainWindow.webContents
   const rendererId = renderer.id
-  const rendererFrame = renderer.mainFrame
+  const rendererFrame = {
+    processId: renderer.mainFrame.processId,
+    routingId: renderer.mainFrame.routingId,
+  }
   const isTrustedSender = (senderId: number) =>
     !mainWindow.isDestroyed() && senderId === rendererId
 
@@ -68,7 +77,7 @@ export function registerCaptureHandlers(mainWindow: BrowserWindow, appSession: S
     const selection = pendingSelections.get(rendererId)
     pendingSelections.delete(rendererId)
 
-    const isExpectedFrame = request.frame === rendererFrame
+    const isExpectedFrame = isMainFrameForRenderer(request.frame, rendererFrame)
     if (!selection || selection.expiresAt < Date.now() || !isExpectedFrame) {
       callback({})
       return
