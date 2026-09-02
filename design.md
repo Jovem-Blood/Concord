@@ -1,582 +1,198 @@
-# Concord — Design Guide
+# Concord Design System
 
-## 1. Brand concept
+This document describes the design that Concord uses today. It is a durable design-to-code contract, not a backlog of speculative visual ideas.
 
-Concord é um app pequeno de screen sharing privado para grupos pequenos.
-O nome nasceu como uma brincadeira com Discord, então a identidade pode assumir
-um posicionamento de “espelho invertido”: familiar, amigável e social, porém mais
-leve, mais clean, mais utilitário e menos “plataforma gamer”.
+## Sources of truth
 
-### Brand keywords
+Use these sources in this order:
 
-- leve
-- claro
-- confiável
-- direto
-- amigável
-- nítido
-- privado
-- técnico sem ser frio
+1. `design.pen` defines brand foundations, visual direction, reusable component intent, and logo explorations.
+2. `apps/desktop/src/renderer/styles.css` defines the shipped layout, responsive behavior, and contextual component adaptations.
+3. Vue components define product behavior, state, accessibility semantics, and final UI copy.
 
-### Brand personality
+When they appear to differ, preserve the visual intent from `design.pen` and use the CSS behavior appropriate to the actual viewport. Update this guide only for enduring rules.
 
-Se o Discord parece uma sala social escura, cheia de energia e presença,
-o Concord deve parecer uma sala iluminada, focada, organizada e acolhedora.
+## Product character
 
-### One-line brand statement
+Concord is a private screen-sharing room for small groups. It should feel like a quiet, focused control room: social enough for conversation, restrained enough to keep shared content dominant.
 
-> Concord é a sala privada, leve e direta para compartilhar sua tela com amigos.
+The brand promise is:
 
----
+> A private room to show your screen and stay in the conversation.
 
-## 2. Visual strategy
+The voice is **calm, direct, private, and clear**. Copy should be short, specific, and reassuring. Avoid marketing language, gamer slang, and inflated claims.
 
-A identidade deve evitar duas armadilhas:
+### Identity principles
 
-1. parecer uma cópia direta do Discord;
-2. parecer um template “AI generated” genérico com gradientes excessivos,
-   cards sem hierarquia e excesso de glow.
+- **One signal color:** citrine marks primary action, focus, selection, and live or transitional states.
+- **Stage first:** shared video owns the dominant region of the room.
+- **Useful softness:** corners feel human but never bubbly.
+- **No gamer costume:** no mascot, neon purple, decorative chrome, or visual imitation of Discord.
 
-A direção visual deve ser:
+The interface should be matte, technical, and quiet. Decoration must support hierarchy or state; it must not compete with the shared screen.
 
-- interface limpa;
-- contraste bem controlado;
-- superfícies suaves;
-- poucos efeitos chamativos;
-- hierarquia forte;
-- tipografia bem resolvida;
-- espaçamento consistente;
-- uso disciplinado de cor de destaque.
+## Foundations
 
-### Aesthetic direction
+### Color
 
-- “soft tech”
-- “calm productivity”
-- “modern desktop utility”
-- “friendly broadcast control room”
+Concord is dark by default. There is no light-theme specification.
 
----
+| Role | Token | Value | Usage |
+|---|---|---:|---|
+| Canvas | `--bg` | `#0B0D10` | App background, video stage, inputs |
+| Surface | `--surface` | `#12151A` | Sidebars, top bar, panels |
+| Raised surface | `--surface-raised` | `#191D24` | Secondary controls, elevated regions |
+| Soft surface | `--surface-soft` | `#20252E` | Hover and disabled states |
+| Border | `--border` | `#2B313C` | Default separators and outlines |
+| Strong border | `--border-strong` | `#3A424F` | Emphasis and hover outlines |
+| Primary text | `--text` | `#F7F7F4` | Headings and important labels |
+| Secondary text | `--text-soft` | `#C3C7CE` | Body copy and secondary controls |
+| Muted text | `--text-muted` | `#858C98` | Metadata and technical labels |
+| Signal | `--accent` | `#F4C84A` | Primary actions, focus, selection, live state |
+| Signal hover | `--accent-strong` | `#DFAF16` | Primary hover |
+| Signal ink | `--accent-ink` | `#241D08` | Text and icons on citrine |
+| Signal surface | `--accent-soft` | `#2A2413` | Selected and active backgrounds |
+| Success | `--success` | `#55C98A` | Connected and healthy states |
+| Danger | `--danger` | `#F06464` | Errors, destructive actions, disconnected state |
 
-## 3. Color system
+Use citrine as a signal, not as decoration. Large yellow areas, ornamental gradients, and persistent glow weaken the hierarchy. Derived danger surfaces and the modal backdrop are calculated in CSS with `color-mix()`.
 
-## 3.1 Core idea
+### Typography
 
-Usar um **colorscheme invertido do espírito do Discord**, não uma inversão matemática literal.
+- UI family: **Geist**, with Inter and system UI fallbacks.
+- Technical family: **Geist Mono**, with a monospace fallback.
+- Geist Mono is reserved for room codes, statuses, timestamps, compact metadata, and uppercase section labels.
+- Most UI text is 11–14px. Panel headings are 16–24px. Display text ranges from 32–52px where space permits.
+- Typical weights are 500–650. Use weight and color before increasing size.
+- Headings use tight negative tracking. Technical labels use positive tracking and may be uppercase.
+- The wordmark is 28px in the welcome view and 20px in the compact room header.
 
-Discord clássico:
-- fundo escuro
-- indigo/blurple forte
-- alto peso visual
-- atmosfera noturna
+Do not introduce another display font without first updating the `.pen` foundations and bundled font assets.
 
-Concord:
-- fundo claro
-- azul-violeta acinzentado como acento
-- superfícies em branco e cinza frio
-- atmosfera limpa e luminosa
+### Spacing, shape, and borders
 
-## 3.2 Primary palette
+The base spacing rhythm is 8px:
 
-### Base neutrals
+- Small: 8px
+- Medium: 16px
+- Large: 24px
 
-- `--bg`: `#F6F7FB`
-- `--bg-elevated`: `#FFFFFF`
-- `--bg-subtle`: `#EEF1F7`
-- `--bg-muted`: `#E6EAF2`
-- `--border`: `#D7DDEA`
-- `--border-strong`: `#C3CCDD`
+The core radii are:
 
-### Text
+- `--radius-sm: 8px` for controls, tiles, and compact rows
+- `--radius-md: 12px` for larger cards and dialogs
+- `--radius-lg: 16px` for foundation-level panels
 
-- `--text`: `#1F2430`
-- `--text-soft`: `#4C5568`
-- `--text-muted`: `#6F7A90`
-- `--text-inverse`: `#FFFFFF`
+Use 4px only for very small overlays or thumbnail details. Fully rounded shapes are limited to status dots, notification counts, and switches.
 
-### Brand accent
+Surfaces normally use a one-pixel border instead of a shadow. Shadows are reserved for true overlays, such as the mobile chat panel. Never add glassmorphism, heavy elevation, or ambient purple glow.
 
-- `--brand-50`: `#F1F2FF`
-- `--brand-100`: `#E4E7FF`
-- `--brand-200`: `#CDD3FF`
-- `--brand-300`: `#B1BBFF`
-- `--brand-400`: `#8D9BFF`
-- `--brand-500`: `#6E80FF`
-- `--brand-600`: `#586AE8`
-- `--brand-700`: `#4654BF`
-- `--brand-800`: `#39439A`
+### Motion
 
-### Semantic colors
+Interaction transitions are 150ms and limited to color, border, background, and compact state changes. Reconnecting may pulse; loading may spin. Avoid bounce, overshoot, parallax, decorative shimmer, or layout theater.
 
-- `--success-bg`: `#E9F9EF`
-- `--success-fg`: `#1F7A46`
-- `--warning-bg`: `#FFF6E8`
-- `--warning-fg`: `#9A6500`
-- `--danger-bg`: `#FDECEC`
-- `--danger-fg`: `#B42318`
-- `--danger-strong`: `#E5484D`
+Honor `prefers-reduced-motion: reduce` by disabling nonessential transitions and animations.
 
-### Focus ring
-
-- `--focus`: `rgba(110, 128, 255, 0.35)`
+## Brand and logo
 
-## 3.3 Dark theme (optional)
+The wordmark is **Concord**, set in Geist with a tight, confident lockup. The current application intentionally renders the wordmark only.
 
-Se houver modo escuro, ele também deve manter a lógica “invertida”:
-não tão pesado quanto Discord, mais fosco e técnico.
+`design.pen` contains a primary lockup and three mark explorations—Joystick, Broken Orbit, and Crossed Signal. These are design studies, not interchangeable production assets. Do not redraw them in CSS, inline SVG, or an approximate icon. A mark should enter the application only after one direction is selected and its final asset is exported.
 
-- `--bg`: `#0F1218`
-- `--bg-elevated`: `#171B23`
-- `--bg-subtle`: `#1C2230`
-- `--border`: `#2A3242`
-- `--text`: `#F2F4F8`
-- `--text-soft`: `#C2C8D4`
-- `--text-muted`: `#97A1B3`
-- `--brand-500`: `#8D9BFF`
+The warm signal color and dark room surfaces must remain consistent across the wordmark, app icon, and any future mark.
 
----
+## Layout
 
-## 4. Logo direction
+### Welcome view
 
-## 4.1 Logo concept
+The welcome experience is an open two-column composition, not a card floating inside another card.
 
-A logo não deve tentar replicar mascote, controle ou balão do Discord.
+- Maximum content width: 1120px.
+- Desktop columns: approximately `1.35fr / 1fr`.
+- The left side carries the product promise and privacy note.
+- The right side contains name, room entry, invite context, and the create-room alternative.
+- A single vertical rule separates message from action.
+- The web footer sits below the main composition and remains visually quiet.
 
-Melhor direção:
-- ícone geométrico baseado em **duas formas em diálogo**;
-- pode sugerir:
-  - duas janelas;
-  - duas telas;
-  - conexão;
-  - “C” aberto;
-  - broadcast;
-  - “concordância”.
+At 800px and below, the columns stack and the divider becomes horizontal. At 540px and below, padding and heading size contract while actions remain easy to reach.
 
-### Good visual metaphors
+### Room view
 
-- duas molduras arredondadas se encontrando;
-- um “C” estilizado em forma de monitor;
-- duas barras/tiles inclinadas sugerindo ligação;
-- um glyph compacto, simples e memorável.
+The room is a full-viewport application shell:
 
-### Avoid
+- Top bar: 56px, with compact brand, room code, and connection state.
+- Participant rail: 216px on wide screens.
+- Stage: flexible and dominant.
+- Chat panel: 320px when open.
 
-- rostinho de gamepad;
-- headset;
-- mascote cartunesco;
-- símbolo excessivamente parecido com logo do Discord;
-- ícone genérico de câmera/webcam.
+The stage has a compact heading, the media canvas, and a bottom control row. Metadata belongs below the image rather than on top of shared content. A single or focused share fills the canvas; multiple shares use a responsive grid with an 8px gap.
 
-## 4.2 Wordmark
+At 1100px and below, the participant and chat rails become narrower and call controls hide their secondary labels. At 800px and below, participants become a horizontal strip and chat becomes a right-side overlay. At 540px and below, the top bar wraps, stage padding contracts, and call controls become compact vertical items.
 
-“Concord” deve usar tipografia:
-- limpa;
-- levemente arredondada;
-- moderna;
-- com aparência confiável de software.
+### Source picker
 
-Boas qualidades:
-- geometria simples;
-- ótimo espaçamento;
-- peso medium ou semibold;
-- sem excesso de personalidade “startup 2021”.
+The capture picker is a focused utility, not a decorative modal.
 
----
+- Maximum size: 960 × 760px within the viewport.
+- Structure: header, scrollable source area, options, and confirmation footer.
+- Source previews preserve a 16:9 ratio.
+- Quality choices distinguish motion (`1080p · 30 FPS`) from sharpness (`1080p · 15 FPS`).
+- System audio is a separate switch with contextual help and a warning when voice is active.
+- On narrow screens, options stack and footer actions expand to the available width.
 
-## 5. Typography
+## Components and states
 
-Objetivo: parecer produto real, não demo de landing page gerada por IA.
+### Actions
 
-### Recommended font stack
+- **Primary:** citrine background with dark ink; use for the next or principal action.
+- **Secondary:** raised dark surface with a neutral border.
+- **Danger:** soft dark-red surface, red border emphasis, and red text.
+- **Ghost or utility:** transparent until hover; use sparingly.
 
-Se quiser sistema:
-- `Inter`
-- `Segoe UI`
-- `system-ui`
-- `sans-serif`
+`design.pen` shows 44px reference buttons and a 44px icon target. The shipped layout may use 40px controls or 32px compact icon buttons where density requires it. Compact controls still need clear focus, an accessible name, and sufficient surrounding space.
 
-Se quiser um pouco mais de personalidade:
-- `Inter` para UI
-- `Sora` ou `Plus Jakarta Sans` apenas para títulos/branding, com moderação
+### Inputs
 
-### Type scale
+Text inputs are at least 44px high, use the canvas background, and have an 8px radius. Hover strengthens the border; keyboard focus uses a two-pixel citrine outline with visible offset. Room codes use Geist Mono and uppercase tracking.
 
-- Display: 32 / 40, weight 700
-- H1: 28 / 36, weight 700
-- H2: 22 / 30, weight 650
-- H3: 18 / 26, weight 650
-- Body large: 16 / 24, weight 400
-- Body: 14 / 22, weight 400
-- Small: 13 / 18, weight 500
-- Label: 12 / 16, weight 600, letter-spacing pequena opcional
+### Participants
 
-### Typography rules
+A participant row contains an initial avatar, truncated name, human-readable voice or connection state, and a small presence signal. Speaking uses the citrine surface plus an inset signal bar. The `.pen` reference is a spacious 280 × 58px row with a 38px avatar; the room rail intentionally compacts this to a 32px avatar.
 
-- evitar títulos enormes demais;
-- evitar muito texto centralizado;
-- evitar 4 pesos diferentes na mesma área;
-- usar semibold para ações e títulos curtos;
-- usar body 14–16px na maior parte da interface.
+### Media
 
----
+Video sits on the deepest background and uses `object-fit: contain`; never crop shared content for visual drama. Each tile keeps its live state, participant name, audio state, and recovery action in a footer. Focus is an explicit user action and must be reversible.
 
-## 6. Layout principles
+### Chat
 
-## 6.1 Core layout philosophy
+Chat is a secondary room panel, not a competing destination. It communicates that messages are session-only, uses citrine for sender emphasis, and keeps timestamps and counters in Geist Mono. The composer always shows readiness, length, and error state.
 
-A interface principal deve parecer um app desktop/web real de colaboração,
-não uma landing page.
+### Status language
 
-### Principles
+- Green: connected or healthy.
+- Citrine: sharing, joining, reconnecting, selected, or active.
+- Red: disconnected, failed, destructive, or invalid.
+- Neutral: private, idle, muted, or informational.
 
-- hierarquia forte;
-- grid simples;
-- barras funcionais;
-- menos decoração, mais estrutura;
-- ações principais sempre óbvias;
-- densidade moderada.
+Color must never be the only state cue. Pair it with a label, icon, shape, or position.
 
-## 6.2 App shell
+## Accessibility contract
 
-Estrutura ideal:
+- Keep keyboard focus visible on every interactive element.
+- Preserve semantic buttons, labels, live regions, dialog roles, and state attributes from the Vue components.
+- The source picker traps focus, closes with Escape, restores previous focus, and makes the room inert while open.
+- Support keyboard navigation and a minimum viewport width of 320px.
+- Do not place essential information only in hover states.
+- Maintain readable contrast across primary, muted, success, and danger states.
+- Test actual keyboard flow, screen-reader announcements, zoom, and color contrast; visual inspection alone is not proof of compliance.
 
-- top bar
-- sidebar de participantes / informações da sala
-- stage principal para os streams
-- action bar clara
+## Design maintenance
 
-### Suggested layout
+When changing the interface:
 
-- Topbar: 64px
-- Sidebar: 280px
-- Content max width: fluido
-- Main padding: 20–24px
-- Gap padrão: 16px
-- Border radius:
-  - cards pequenos: 12px
-  - painéis: 16px
-  - modal: 20px
+1. Update `design.pen` first for brand foundations or reusable component intent.
+2. Update `styles.css` for shipped layout, responsive behavior, and contextual variants.
+3. Update Vue components for semantics, state, behavior, or copy.
+4. Update this guide only when the enduring design contract changes.
 
----
-
-## 7. UI components
-
-## 7.1 Buttons
-
-### Variants
-
-- Primary
-- Secondary
-- Tertiary/Ghost
-- Danger
-
-### Primary
-
-- fundo `--brand-500`
-- texto branco
-- hover `--brand-600`
-- active `--brand-700`
-
-### Secondary
-
-- fundo `--bg-subtle`
-- borda `--border`
-- texto `--text`
-
-### Ghost
-
-- fundo transparente
-- hover leve com `--bg-subtle`
-
-### Danger
-
-- fundo `--danger-strong`
-- texto branco
-
-### Button style rules
-
-- altura mínima 40px
-- padding horizontal 14–16px
-- raio 12px
-- sem gradiente
-- sem sombra forte
-- transições sutis
-
-## 7.2 Inputs
-
-- altura ~44px
-- fundo branco
-- borda cinza suave
-- placeholder discreto
-- focus ring visível
-- erro com borda e mensagem sem exagero
-
-## 7.3 Cards / panels
-
-- fundo branco
-- borda 1px suave
-- sombra muito leve
-- padding confortável
-- títulos compactos
-
-## 7.4 Modal
-
-O source picker deve parecer ferramenta séria, não popup cenográfico.
-
-- cabeçalho claro
-- grid de fontes bem alinhado
-- ações no rodapé
-- opção de qualidade e áudio com explicações curtas
-- thumbnails mais valorizadas
-- estados loading/empty mais elegantes
-
----
-
-## 8. Media experience
-
-## 8.1 Stage
-
-A área de streams é o centro do produto.
-
-Ela precisa:
-- parecer importante;
-- ter bom contraste;
-- maximizar foco no conteúdo;
-- manter chrome mínimo.
-
-### Rules
-
-- tiles maiores;
-- bordas suaves;
-- fundo da stage um pouco mais escuro ou neutro que a UI ao redor;
-- labels discretas sobre os vídeos;
-- menos ornamentos.
-
-## 8.2 Stream tiles
-
-- raio 16px
-- fundo neutro escuro quando sem vídeo
-- overlay inferior com nome do participante
-- badges pequenas para:
-  - compartilhando áudio
-  - você
-  - preview local
-
-### Avoid
-
-- muita informação dentro do tile;
-- bordas excessivamente grossas;
-- glow roxo;
-- carinha “dashboard NFT”.
-
----
-
-## 9. Motion
-
-Motion deve ser curta, útil e discreta.
-
-### Use
-
-- fade/slide curto em modais;
-- hover suave;
-- foco com feedback claro;
-- transição de layout ao focar stream.
-
-### Avoid
-
-- bounce
-- overshoot exagerado
-- parallax
-- shimmer gratuito
-- animações “AI SaaS landing page”
-
-Recommended:
-- duration 120–180ms microinterações
-- 180–240ms modais
-- easing suave, sem teatralidade
-
----
-
-## 10. Iconography
-
-- simples
-- outline ou duotone leve
-- cantos arredondados
-- consistência de stroke
-
-Ícones sugeridos:
-- monitor
-- janela
-- link
-- usuários
-- áudio
-- copiar
-- sair
-- foco/maximizar
-
-Evitar pack visualmente muito “corporate enterprise”.
-Lucide é uma boa direção.
-
----
-
-## 11. Brand voice in UI copy
-
-A cópia deve soar humana, direta e calma.
-
-### Tone
-
-- clara
-- curta
-- segura
-- sem excesso de entusiasmo
-- amigável sem parecer marketing
-
-### Good examples
-
-- “Entre e compartilhe.”
-- “Sua sala privada para mostrar a tela.”
-- “Escolha uma janela ou monitor.”
-- “Ninguém está compartilhando ainda.”
-- “A conexão caiu. Tentando reconectar.”
-
-### Avoid
-
-- “Supercharge your collaboration”
-- “Seamless AI-powered sharing experience”
-- “Broadcast effortlessly in seconds”
-
----
-
-## 12. Make it feel less AI-generated
-
-## 12.1 Common AI-looking problems
-
-- gradientes em excesso;
-- brilho/glow em tudo;
-- cards sem função;
-- elementos “bonitos” mas sem hierarquia;
-- textos genéricos de startup;
-- cantos arredondados demais em tudo;
-- inconsistência de espaçamento;
-- tela muito vazia com elementos gigantes;
-- ilustrações abstratas desnecessárias.
-
-## 12.2 Anti-AI heuristics
-
-- cada bloco deve ter propósito claro;
-- reduzir marketing visual e aumentar estrutura;
-- usar mais alinhamento do que efeito;
-- no máximo 1 cor de destaque dominante;
-- sombras quase invisíveis;
-- tipografia mais madura;
-- labels e microcopy mais específicas;
-- menos gimmick, mais produto.
-
----
-
-## 13. Accessibility
-
-- contraste AA no mínimo;
-- focus visível em todos os controles;
-- navegação por teclado nos modais;
-- `aria-label` onde necessário;
-- targets de clique confortáveis;
-- estados disabled claramente distinguíveis;
-- cores sem depender exclusivamente de matiz.
-
----
-
-## 14. Practical UI recommendations for Concord
-
-## Welcome screen
-
-Hoje deve evoluir para:
-- branding mais forte;
-- menos “hero genérico”;
-- foco em ação;
-- campos bem proporcionados;
-- melhor separação entre criar e entrar.
-
-### Content structure
-
-- logo
-- nome do produto
-- tagline curta
-- input nome
-- ação primária: criar sala
-- separador
-- input código + entrar
-
-## App screen
-
-Melhorar:
-- topbar menos genérica;
-- sidebar com bloco de sala e bloco de participantes;
-- stage mais cinematográfica;
-- actions mais claras;
-- badges mais refinadas;
-- estados vazios mais elegantes.
-
-## Source picker
-
-Deve parecer um seletor premium de captura:
-- thumbnails maiores;
-- tabs ou filtro visual entre monitor e janela, se fizer sentido;
-- explicação do áudio mais curta;
-- perfis de qualidade com melhor visual;
-- hierarquia mais limpa.
-
----
-
-## 15. Suggested design tokens
-
-```css
-:root {
-  --bg: #F6F7FB;
-  --bg-elevated: #FFFFFF;
-  --bg-subtle: #EEF1F7;
-  --bg-muted: #E6EAF2;
-
-  --border: #D7DDEA;
-  --border-strong: #C3CCDD;
-
-  --text: #1F2430;
-  --text-soft: #4C5568;
-  --text-muted: #6F7A90;
-  --text-inverse: #FFFFFF;
-
-  --brand-50: #F1F2FF;
-  --brand-100: #E4E7FF;
-  --brand-200: #CDD3FF;
-  --brand-300: #B1BBFF;
-  --brand-400: #8D9BFF;
-  --brand-500: #6E80FF;
-  --brand-600: #586AE8;
-  --brand-700: #4654BF;
-  --brand-800: #39439A;
-
-  --success-bg: #E9F9EF;
-  --success-fg: #1F7A46;
-  --warning-bg: #FFF6E8;
-  --warning-fg: #9A6500;
-  --danger-bg: #FDECEC;
-  --danger-fg: #B42318;
-  --danger-strong: #E5484D;
-
-  --focus: rgba(110, 128, 255, 0.35);
-
-  --radius-sm: 10px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
-  --shadow-md: 0 8px 24px rgba(16, 24, 40, 0.06);
-
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-}
+Before merging a visual change, compare the affected screen against `design.pen` and verify desktop, 1100px, 800px, 540px, reduced-motion, keyboard-focus, empty, loading, error, selected, disabled, and reconnecting states as applicable.
