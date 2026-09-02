@@ -91,7 +91,7 @@ function setup() {
   const states: string[] = []
   service.onSnapshot((snapshot) => snapshots.push(snapshot))
   service.onConnection((state) => states.push(state))
-  const connect = () => service.connect({ participantToken: 'opaque-token', identity: 'local', expiresAt: Date.now() + 7200000, iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }] })
+  const connect = () => service.connect({ participantToken: 'opaque-token', identity: 'local', expiresAt: Date.now() + 7200000 })
   const stream = (audio = true) => {
     const tracks = [new FakeTrack('video', 'screen'), ...(audio ? [new FakeTrack('audio', 'system-audio')] : [])]
     return { tracks, media: { getTracks: () => tracks, getVideoTracks: () => tracks.filter((t) => t.kind === 'video'), getAudioTracks: () => tracks.filter((t) => t.kind === 'audio') } as unknown as MediaStream }

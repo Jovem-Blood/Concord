@@ -11,7 +11,7 @@ afterEach(async () => {
   vi.useRealTimers()
   await Promise.all(apps.splice(0).map((app) => app.close()))
 })
-async function fixture(turn?: () => Promise<{ urls: string[] }[]>) {
+async function fixture() {
   let sessionNumber = 0
   const sfu: SfuClient = {
     createSession: vi.fn(async () => ({ sessionId: `session-${++sessionNumber}` })),
@@ -24,7 +24,7 @@ async function fixture(turn?: () => Promise<{ urls: string[] }[]>) {
         ...(operation === 'tracks/new' ? { sessionDescription: { type: 'answer' as const, sdp: 'answer-sdp' } } : {}) }
     }),
   }
-  const app = await buildApp(config, sfu, turn)
+  const app = await buildApp(config, sfu)
   apps.push(app)
   async function join(roomCode = 'ABCD2345', displayName = 'Thiago') {
     const response = await app.inject({ method: 'POST', url: '/v1/join', payload: { roomCode, displayName } })
@@ -45,10 +45,10 @@ async function fixture(turn?: () => Promise<{ urls: string[] }[]>) {
 }
 
 describe('Cloudflare room signaling', () => {
-  it('issues opaque credentials, STUN and presence without creating idle SFU sessions', async () => {
+  it('issues opaque credentials and presence without creating idle SFU sessions', async () => {
     const { app, sfu, join } = await fixture()
     const { data, headers } = await join()
-    expect(data).toMatchObject({ identity: expect.any(String), participantToken: expect.any(String), iceServers: [{ urls: ['stun:stun.cloudflare.com:3478'] }] })
+    expect(data).toMatchObject({ identity: expect.any(String), participantToken: expect.any(String) })
     expect(JSON.stringify(data)).not.toContain('private-secret')
     expect(data.expiresAt).toBeGreaterThan(Date.now())
     expect(sfu.createSession).not.toHaveBeenCalled()
@@ -64,21 +64,6 @@ describe('Cloudflare room signaling', () => {
       expect((await app.inject({ method: 'POST', url, headers: { authorization: 'Bearer forged' } })).statusCode).toBe(401)
     }
     expect(sfu.request).not.toHaveBeenCalled()
-  })
-
-  it('generates TURN credentials without exposing the permanent token', async () => {
-    const turn = vi.fn(async () => [{ urls: ['turns:turn.cloudflare.com:443'], username: 'temporary', credential: 'temporary-secret' }])
-    const { join } = await fixture(turn)
-    const { data } = await join()
-    expect(data.iceServers[0].credential).toBe('temporary-secret')
-    expect(turn).toHaveBeenCalledOnce()
-  })
-
-  it('fails closed when TURN is unavailable', async () => {
-    const { app } = await fixture(vi.fn().mockRejectedValue(new Error('private upstream details')))
-    const result = await app.inject({ method: 'POST', url: '/v1/join', payload: { roomCode: 'ABCD2345', displayName: 'A' } })
-    expect(result.statusCode).toBe(500)
-    expect(result.body).not.toContain('private upstream details')
   })
 
   it('isolates participants and subscriptions between rooms', async () => {

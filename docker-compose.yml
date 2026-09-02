@@ -12,11 +12,8 @@ services:
       CLOUDFLARE_SFU_APP_ID: ${CLOUDFLARE_SFU_APP_ID:?Set CLOUDFLARE_SFU_APP_ID in .env}
       CLOUDFLARE_SFU_APP_SECRET: ${CLOUDFLARE_SFU_APP_SECRET:?Set CLOUDFLARE_SFU_APP_SECRET in .env}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
-      CLOUDFLARE_TURN_KEY_ID: ${CLOUDFLARE_TURN_KEY_ID:-}
-      CLOUDFLARE_TURN_API_TOKEN: ${CLOUDFLARE_TURN_API_TOKEN:-}
-      CLOUDFLARE_TURN_TTL_SECONDS: ${CLOUDFLARE_TURN_TTL_SECONDS:-7200}
     ports:
-      - "3001:3001/tcp"
+      - "127.0.0.1:3001:3001/tcp"
 
   web:
     build:
@@ -29,4 +26,4 @@ services:
     depends_on:
       - token-server
     ports:
-      - "4173:4173/tcp"
+      - "127.0.0.1:4173:4173/tcp"

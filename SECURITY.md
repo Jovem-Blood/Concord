@@ -20,4 +20,4 @@ The maintainers will acknowledge the report when possible, investigate it, and c
 
 ## Deployment responsibility
 
-Self-hosters are responsible for protecting Cloudflare credentials, restricting `ALLOWED_ORIGINS`, using HTTPS, keeping Concord and its dependencies updated, and monitoring the public API. Never expose `CLOUDFLARE_SFU_APP_SECRET` or TURN API tokens in `VITE_` variables or client bundles.
+Self-hosters are responsible for protecting Cloudflare credentials, restricting `ALLOWED_ORIGINS`, using HTTPS, keeping Concord and its dependencies updated, and monitoring the public API. Never expose `CLOUDFLARE_SFU_APP_SECRET` in `VITE_` variables or client bundles.

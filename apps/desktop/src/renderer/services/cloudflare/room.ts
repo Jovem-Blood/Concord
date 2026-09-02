@@ -13,6 +13,8 @@ export class SignalingError extends Error {
   constructor(public readonly status: number) { super(`Room API responded with ${status}`) }
 }
 
+const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.cloudflare.com:3478' }]
+
 export class CloudflareRoomService {
   private credentials: JoinResponse | null = null
   private pc: RTCPeerConnection | null = null
@@ -186,7 +188,7 @@ export class CloudflareRoomService {
   private async ensurePeer(): Promise<RTCPeerConnection> {
     if (this.pc) return this.pc
     await this.api('session')
-    const pc = new RTCPeerConnection({ iceServers: this.credentials!.iceServers, bundlePolicy: 'max-bundle' })
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, bundlePolicy: 'max-bundle' })
     this.pc = pc
     this.needsReset = false
     pc.ontrack = (event) => {

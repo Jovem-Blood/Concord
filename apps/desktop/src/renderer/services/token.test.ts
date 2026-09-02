@@ -4,42 +4,25 @@ import { requestJoinToken } from './token'
 afterEach(() => vi.unstubAllGlobals())
 
 describe('requestJoinToken', () => {
-  it('accepts temporary ICE servers from the token server', async () => {
+  it('accepts room credentials from the token server', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       identity: 'participant-id',
       expiresAt: 4102444800000,
       participantToken: 'signed.jwt.value',
-      iceServers: [
-        { urls: ['stun:stun.cloudflare.com:3478'] },
-        {
-          urls: ['turns:turn.cloudflare.com:443?transport=tcp'],
-          username: 'temporary-user',
-          credential: 'temporary-credential',
-        },
-      ],
     }), { status: 200 })))
 
     await expect(requestJoinToken('ABCD2345', 'Thiago')).resolves.toMatchObject({
       identity: 'participant-id',
       expiresAt: 4102444800000,
       participantToken: 'signed.jwt.value',
-      iceServers: [
-        { urls: ['stun:stun.cloudflare.com:3478'] },
-        {
-          urls: ['turns:turn.cloudflare.com:443?transport=tcp'],
-          username: 'temporary-user',
-          credential: 'temporary-credential',
-        },
-      ],
     })
   })
 
-  it('rejects malformed ICE server data', async () => {
+  it('rejects expired room credentials', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       identity: 'participant-id',
-      expiresAt: 4102444800000,
+      expiresAt: 1,
       participantToken: 'signed.jwt.value',
-      iceServers: [{ urls: [42] }],
     }), { status: 200 })))
 
     await expect(requestJoinToken('ABCD2345', 'Thiago')).rejects.toMatchObject({

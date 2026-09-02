@@ -5,7 +5,6 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import type { ServerConfig } from './config.js'
 import { parseJoinInput } from './validation.js'
 import { validMediaSource, type MediaSource } from './media.js'
-import { createCloudflareTurnCredentialsProvider, type TurnCredentialsProvider } from './turn.js'
 import { createSfuClient, type SfuClient, type SessionDescription, type SfuTrack } from './sfu.js'
 
 const PRESENCE_TTL = 120_000
@@ -43,15 +42,12 @@ const tokenHash = (token: string) => createHash('sha256').update(token).digest('
 export async function buildApp(
   config: ServerConfig,
   sfu: SfuClient = createSfuClient(config.cloudflareSfu),
-  turnCredentialsProvider?: TurnCredentialsProvider,
 ) {
   const app = Fastify({
     logger: { level: process.env.LOG_LEVEL ?? 'info', redact: ['req.headers.authorization', 'req.body'] },
     bodyLimit: 256 * 1024,
   })
   const members = new Map<string, Participant>()
-  const issueTurn = turnCredentialsProvider ??
-    (config.cloudflareTurn ? createCloudflareTurnCredentialsProvider(config.cloudflareTurn) : undefined)
 
   await app.register(cors, {
     methods: ['GET', 'POST'],
@@ -132,15 +128,14 @@ export async function buildApp(
     if (!input) return reply.code(400).send({ error: 'INVALID_JOIN_REQUEST', message: 'Invalid room code or display name.' })
     if (members.size >= 2000) fail(503, 'Server capacity reached.')
     if ([...members.values()].filter((p) => active(p) && p.roomCode === input.roomCode).length >= 16) fail(409, 'Room capacity reached.')
-    const iceServers = await issueTurn?.() ?? [{ urls: ['stun:stun.cloudflare.com:3478'] }]
     const participantToken = randomBytes(32).toString('base64url')
     const identity = randomUUID()
-    const expiresAt = Date.now() + Math.min(TOKEN_TTL, (config.cloudflareTurn?.ttlSeconds ?? 7200) * 1000)
+    const expiresAt = Date.now() + TOKEN_TTL
     members.set(tokenHash(participantToken), {
       identity, name: input.displayName, roomCode: input.roomCode, expiresAt, lastSeen: Date.now(),
       published: new Map(), mids: new Set(), channels: new Map(), dataEstablished: false, busy: false,
     })
-    return reply.header('cache-control', 'no-store').send({ participantToken, identity, expiresAt, iceServers })
+    return reply.header('cache-control', 'no-store').send({ participantToken, identity, expiresAt })
   })
   app.get('/v1/room', authenticated, async (request, reply) => {
     const current = authenticate(request)

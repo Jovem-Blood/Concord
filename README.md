@@ -113,7 +113,20 @@ An invite such as `http://localhost:5173/ABCD2345` prepares the client to join t
 docker compose up --build
 ```
 
-Open `http://localhost:4173`. Docker Compose loads the root `.env` automatically. There is no local SFU emulator: development media still uses Cloudflare. Unit tests use an SFU mock and need no credentials.
+Open `http://localhost:4173`. The single Compose file loads the root `.env` automatically and binds both services to loopback. There is no local SFU emulator: development media still uses Cloudflare. Unit tests use an SFU mock and need no credentials.
+
+### Production through a tunnel
+
+Run `./scripts/setup-self-host.sh concord.example.com` to prepare new environment files, fill in the SFU credentials, then start the same Compose file with `docker compose up -d --build`. The tunnel terminates HTTPS and replaces an additional reverse proxy. Route requests as follows:
+
+| Public route | Origin on the host |
+|---|---|
+| `/health`, `/v1/*` | `http://127.0.0.1:3001` |
+| All other routes | `http://127.0.0.1:4173` |
+
+Do not cache `/v1/*`. If the tunnel does not support path-based routing, use a separate API hostname and set `PUBLIC_TOKEN_SERVER_URL` before building. `ALLOWED_ORIGINS` must include the public web origin. A tunnel running in a container can join the Compose network and use `http://token-server:3001` and `http://web:4173` directly.
+
+Run exactly one `token-server` instance: room presence, tokens, and publications are kept in memory, and restarting it ends the active room sessions.
 
 ## Configuration
 
@@ -125,13 +138,10 @@ Open `http://localhost:4173`. Docker Compose loads the root `.env` automatically
 | `PORT` | API port; defaults to `3001` |
 | `PUBLIC_APP_URL` | Public web URL used by Docker Compose |
 | `PUBLIC_TOKEN_SERVER_URL` | Public API URL embedded in the Compose web build |
-| `CLOUDFLARE_TURN_KEY_ID` | Optional TURN key for restrictive networks |
-| `CLOUDFLARE_TURN_API_TOKEN` | Private token used to mint temporary TURN credentials |
-| `CLOUDFLARE_TURN_TTL_SECONDS` | TURN lifetime; defaults to `7200`, maximum `172800` |
 | `VITE_TOKEN_SERVER_URL` | API URL embedded in the client |
 | `VITE_WEB_APP_URL` | Base URL used by desktop invite links |
 
-Without TURN configuration, Concord uses Cloudflare STUN. With TURN enabled, direct connections remain allowed. Web capture audio availability depends on the browser, operating system, and selected source; video continues with a warning when audio is unavailable.
+Concord uses Cloudflare STUN and does not configure a TURN relay. Networks that require relay connectivity are therefore unsupported. Web capture audio availability depends on the browser, operating system, and selected source; video continues with a warning when audio is unavailable.
 
 ## Development
 
@@ -148,7 +158,6 @@ The web build is written to `apps/desktop/dist-web`. `pnpm make` builds release 
 Useful project references:
 
 - [Manual test checklist](docs/manual-test-checklist.md)
-- [Infrastructure and production deployment](infra/README.md)
 - [Design guide](design.md)
 - [Contributing guide](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)

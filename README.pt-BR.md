@@ -113,7 +113,20 @@ Um convite como `http://localhost:5173/ABCD2345` prepara o cliente para entrar n
 docker compose up --build
 ```
 
-Abra `http://localhost:4173`. O Docker Compose carrega o `.env` da raiz automaticamente. Não há emulador SFU local: a mídia de desenvolvimento também usa a Cloudflare. Os testes unitários usam um SFU simulado e não precisam de credenciais.
+Abra `http://localhost:4173`. O único arquivo Compose carrega o `.env` da raiz automaticamente e prende os dois serviços ao loopback. Não há emulador SFU local: a mídia de desenvolvimento também usa a Cloudflare. Os testes unitários usam um SFU simulado e não precisam de credenciais.
+
+### Produção por túnel
+
+Execute `./scripts/setup-self-host.sh concord.example.com` para preparar novos arquivos de ambiente, preencha as credenciais SFU e inicie o mesmo Compose com `docker compose up -d --build`. O túnel termina HTTPS e substitui um proxy reverso adicional. Distribua as requisições assim:
+
+| Rota pública | Origem no host |
+|---|---|
+| `/health`, `/v1/*` | `http://127.0.0.1:3001` |
+| Demais rotas | `http://127.0.0.1:4173` |
+
+Não faça cache de `/v1/*`. Se o túnel não aceitar regras por caminho, use um hostname separado para a API e defina `PUBLIC_TOKEN_SERVER_URL` antes do build. `ALLOWED_ORIGINS` deve incluir a origem pública do web. Um túnel executado em contêiner pode entrar na rede do Compose e acessar diretamente `http://token-server:3001` e `http://web:4173`.
+
+Execute exatamente uma instância de `token-server`: presença, tokens e publicações ficam em memória, e reiniciá-la encerra as sessões de sala ativas.
 
 ## Configuração
 
@@ -125,13 +138,10 @@ Abra `http://localhost:4173`. O Docker Compose carrega o `.env` da raiz automati
 | `PORT` | Porta da API; padrão `3001` |
 | `PUBLIC_APP_URL` | URL pública do web usada pelo Docker Compose |
 | `PUBLIC_TOKEN_SERVER_URL` | URL pública da API incorporada ao build web do Compose |
-| `CLOUDFLARE_TURN_KEY_ID` | Chave TURN opcional para redes restritivas |
-| `CLOUDFLARE_TURN_API_TOKEN` | Token privado para gerar credenciais TURN temporárias |
-| `CLOUDFLARE_TURN_TTL_SECONDS` | Validade TURN; padrão `7200`, máximo `172800` |
 | `VITE_TOKEN_SERVER_URL` | URL da API incorporada ao cliente |
 | `VITE_WEB_APP_URL` | URL-base usada nos convites copiados pelo desktop |
 
-Sem TURN configurado, o Concord usa STUN da Cloudflare. Com TURN, conexões diretas continuam permitidas. A disponibilidade de áudio na captura web depende do navegador, sistema operacional e fonte escolhida; quando o áudio não está disponível, o vídeo continua com um aviso.
+O Concord usa STUN da Cloudflare e não configura relay TURN. Portanto, redes que exigem relay não são suportadas. A disponibilidade de áudio na captura web depende do navegador, sistema operacional e fonte escolhida; quando o áudio não está disponível, o vídeo continua com um aviso.
 
 ## Desenvolvimento
 
@@ -148,7 +158,6 @@ O build web fica em `apps/desktop/dist-web`. `pnpm make` gera artefatos de relea
 Referências úteis do projeto:
 
 - [Lista de testes manuais](docs/manual-test-checklist.md)
-- [Infraestrutura e deploy em produção](infra/README.md)
 - [Guia de design](design.md)
 - [Guia de contribuição](CONTRIBUTING.md)
 - [Política de segurança](SECURITY.md)
