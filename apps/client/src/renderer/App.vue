@@ -13,6 +13,7 @@ import SiteFooter from './components/SiteFooter.vue'
 import SourcePicker from './components/SourcePicker.vue'
 import { useVoice } from './composables/useVoice'
 import { stopMediaStream } from './domain/capture-cleanup'
+import { avatarUrl } from './domain/avatar'
 import { createRoomLink, roomCodeFromRoute } from './domain/room-link'
 import { generateRoomCode, isValidRoomCode, normalizeRoomCode } from './domain/room-code'
 import type { RoomState, ShareState } from './domain/state'
@@ -51,6 +52,7 @@ const configuredWebAppUrl = String(import.meta.env.VITE_WEB_APP_URL ?? '').trim(
 const publicWebAppUrl = configuredWebAppUrl || (captureEnvironment === 'web' ? window.location.origin : 'http://localhost:5173')
 const invitedRoomCode = computed(() => roomCodeFromRoute(route.params.roomCode))
 const canSubmit = computed(() => displayName.value.trim().length >= 1 && roomState.value !== 'joining')
+const avatarPreviewUrl = computed(() => avatarUrl(displayName.value))
 const statusLabel = computed(() => ({
   connected: 'Conectado',
   reconnecting: 'Reconectando…',
@@ -271,10 +273,13 @@ onBeforeUnmount(() => {
           <strong>{{ invitedRoomCode }}</strong>
         </div>
 
-        <label class="field">
-          <span>Como devemos chamar você?</span>
-          <input v-model="displayName" maxlength="32" placeholder="Seu nome" autocomplete="name" autofocus />
-        </label>
+        <div class="identity-field">
+          <img class="avatar-preview" :src="avatarPreviewUrl" :alt="displayName.trim() ? `Avatar de ${displayName.trim()}` : 'Prévia do seu avatar'" />
+          <label class="field">
+            <span>Como devemos chamar você?</span>
+            <input v-model="displayName" maxlength="32" placeholder="Seu nome" autocomplete="name" autofocus />
+          </label>
+        </div>
 
         <button v-if="invitedRoomCode" class="button primary full" :disabled="!canSubmit" @click="joinRoom(invitedRoomCode)">
           Entrar na sala

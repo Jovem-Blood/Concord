@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ParticipantView, VoiceState } from '../services/cloudflare/types'
+import { avatarUrl } from '../domain/avatar'
 defineProps<{ participants: ParticipantView[]; voice: VoiceState; speaking: Record<string, boolean>; status: string }>()
 </script>
 <template>
@@ -9,7 +10,7 @@ defineProps<{ participants: ParticipantView[]; voice: VoiceState; speaking: Reco
       v-for="participant in participants" :key="participant.identity"
       :class="{ speaking: speaking[participant.isLocal ? 'local' : participant.identity] }"
     >
-      <span class="avatar" aria-hidden="true">{{ participant.name.slice(0, 1).toUpperCase() }}</span>
+      <img class="avatar" :src="avatarUrl(participant.name)" :alt="`Avatar de ${participant.name}`" />
       <span>
         <strong :title="participant.name">{{ participant.name }}{{ participant.isLocal ? ' · Você' : '' }}</strong>
         <small class="participant-status">{{ status !== 'Conectado' ? status :
