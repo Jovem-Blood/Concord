@@ -83,7 +83,7 @@ app.whenReady().then(() => {
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' http://localhost:* ws://localhost:* https: wss:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'",
+          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://api.dicebear.com; media-src 'self' blob:; connect-src 'self' http://localhost:* ws://localhost:* https: wss:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'",
         ],
       },
     })
