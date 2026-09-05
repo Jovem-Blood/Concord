@@ -2,6 +2,7 @@ import { onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import type { CloudflareRoomService } from '../services/cloudflare/room'
 import type { RemoteVoiceTrack, VoiceState } from '../services/cloudflare/types'
 import { MicrophoneService } from '../services/microphone'
+import { soundPlayer } from '../services/sounds'
 import { SpeakingMonitor } from '../services/speaking'
 
 export function useVoice(room: CloudflareRoomService) {
@@ -25,7 +26,12 @@ export function useVoice(room: CloudflareRoomService) {
     speaking.value = Object.fromEntries(Object.entries(speaking.value).filter(([id]) => identities.has(id)))
   })
   function toggleMicrophone(): void {
-    notice.value = ''; monitor.resume(); void microphone.toggle()
+    notice.value = ''; monitor.resume()
+    const wasActive = voice.value.joined && !voice.value.muted
+    void microphone.toggle().then(() => {
+      const isActive = voice.value.joined && !voice.value.muted
+      if (isActive !== wasActive) soundPlayer.play(isActive ? 'microphone-on' : 'microphone-off')
+    })
   }
   function reset(): void { microphone.reset(); remoteTracks.value = []; monitor.stop(); speaking.value = {}; notice.value = '' }
   onBeforeUnmount(reset)

@@ -22,9 +22,11 @@ import { writeClipboard } from './services/clipboard'
 import { CloudflareRoomService } from './services/cloudflare/room'
 import type { ChatSnapshot } from './services/chat'
 import type { ParticipantView, RemoteShareView } from './services/cloudflare/types'
+import { PresenceSoundNotifier, soundPlayer } from './services/sounds'
 import { requestJoinToken } from './services/server'
 
 const roomService = new CloudflareRoomService()
+const presenceSounds = new PresenceSoundNotifier()
 const voiceControls = useVoice(roomService)
 const route = useRoute()
 const router = useRouter()
@@ -46,6 +48,7 @@ const chat = ref<ChatSnapshot>({ messages: [], unread: 0, open: false, ready: fa
 const chatError = ref('')
 const chatPanel = ref<{ clearDraft(): void } | null>(null)
 let cleanupPromise: Promise<void> | null = null
+let screenSoundOpen = false
 
 const captureEnvironment = captureProvider.capabilities.environment
 const configuredWebAppUrl = String(import.meta.env.VITE_WEB_APP_URL ?? '').trim()
@@ -72,6 +75,8 @@ watch(
 )
 
 roomService.onSnapshot((snapshot) => {
+  if (currentRoomCode.value) presenceSounds.update(snapshot.participants)
+  else presenceSounds.reset()
   participants.value = snapshot.participants
   shares.value = snapshot.shares
   voiceControls.remoteTracks.value = snapshot.remoteVoiceTracks
@@ -79,7 +84,17 @@ roomService.onSnapshot((snapshot) => {
     focusedShareKey.value = ''
   }
 })
-roomService.onChat((snapshot) => { chat.value = snapshot })
+roomService.onChat((snapshot) => {
+  const previousMessage = chat.value.messages[chat.value.messages.length - 1]
+  const nextMessage = snapshot.messages[snapshot.messages.length - 1]
+  const previousKey = previousMessage ? `${previousMessage.senderId}:${previousMessage.id}` : ''
+  const nextKey = nextMessage ? `${nextMessage.senderId}:${nextMessage.id}` : ''
+  const localIdentity = participants.value.find((participant) => participant.isLocal)?.identity
+  if (nextMessage && nextKey !== previousKey && nextMessage.senderId !== localIdentity) {
+    soundPlayer.play('chat-notification')
+  }
+  chat.value = snapshot
+})
 
 roomService.onConnection((state) => {
   roomState.value = state
@@ -112,6 +127,8 @@ async function joinRoom(roomCode: string): Promise<void> {
     currentRoomCode.value = normalizedCode
     roomCodeInput.value = normalizedCode
     await router.replace(`/${normalizedCode}`)
+    presenceSounds.update(participants.value)
+    soundPlayer.play('join')
   } catch (error) {
     roomState.value = 'error'
     errorMessage.value = getErrorMessage(error)
@@ -127,6 +144,8 @@ function enterRoom(): void {
 }
 
 async function leaveRoom(): Promise<void> {
+  soundPlayer.play('leave')
+  presenceSounds.reset()
   await stopSharing()
   await roomService.disconnect()
   voiceControls.reset()
@@ -198,6 +217,8 @@ async function startSharing(
     if (localPreview.value) localPreview.value.srcObject = stream
     await roomService.publishScreen(stream, profile)
     shareState.value = 'sharing'
+    screenSoundOpen = true
+    soundPlayer.play('screen-open')
   } catch (error) {
     await captureProvider.cancel()
     await stopSharing()
@@ -218,6 +239,8 @@ function stopSharing(): Promise<void> {
   if (!localStream.value && shareState.value === 'idle') return Promise.resolve()
 
   cleanupPromise = (async () => {
+    const notifyClose = screenSoundOpen
+    screenSoundOpen = false
     shareState.value = 'stopping'
     const stream = localStream.value
     localStream.value = null
@@ -226,6 +249,7 @@ function stopSharing(): Promise<void> {
     if (localPreview.value) localPreview.value.srcObject = null
     await roomService.unpublishScreen()
     shareState.value = 'idle'
+    if (notifyClose) soundPlayer.play('screen-close')
   })().finally(() => {
     cleanupPromise = null
   })
@@ -239,6 +263,7 @@ function getErrorMessage(error: unknown): string {
 }
 
 onBeforeUnmount(() => {
+  presenceSounds.reset()
   void stopSharing()
   void roomService.disconnect()
   voiceControls.reset()
