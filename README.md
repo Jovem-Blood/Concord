@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/Jovem-Blood/Concord/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Jovem-Blood/Concord?include_prereleases&sort=semver&style=flat-square&color=FBC437&labelColor=12151A" /></a>
-  <a href="https://github.com/Jovem-Blood/Concord/actions/workflows/release.yml"><img alt="Desktop release workflow" src="https://github.com/Jovem-Blood/Concord/actions/workflows/release.yml/badge.svg" /></a>
+  <a href="https://github.com/Jovem-Blood/Concord/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Jovem-Blood/Concord/actions/workflows/ci.yml/badge.svg?branch=main" /></a>
   <img alt="Node.js 22.12 to 24" src="https://img.shields.io/badge/Node.js-22.12%E2%80%9324-FBC437?style=flat-square&labelColor=12151A" />
   <img alt="Windows and Linux" src="https://img.shields.io/badge/desktop-Windows%20%7C%20Linux-F7F7F4?style=flat-square&labelColor=12151A" />
 </p>
@@ -164,11 +164,15 @@ Useful project references:
 
 ## Releases
 
+CI runs type checks, tests, lint, web/server builds, and Docker builds on pushes
+to `main` and pull requests. Deployment to the self-hosted machine is manual.
+The download reflects the latest tagged release; `main` may include newer work.
+
 SemVer tags such as `v0.1.0` trigger `.github/workflows/release.yml`. The tag must match `apps/client/package.json` and point to a commit contained in `main`. The workflow verifies the project, builds Windows and Linux artifacts, generates SHA-256 checksums, and publishes a GitHub Release.
 
 ## Privacy and security
 
-Electron runs with `nodeIntegration: false`, `contextIsolation: true`, sandboxing, and a restrictive Content Security Policy. Its preload exposes only capture operations. Capture selections are tied to the requesting window, expire after ten seconds, and are consumed once.
+Electron runs with `nodeIntegration: false`, `contextIsolation: true`, sandboxing, and a restrictive Content Security Policy. Its preload exposes only capture operations and clipboard text writing. Capture selections are tied to the requesting window, expire after ten seconds, and are consumed once.
 
 The microphone is requested only after the user presses its control and never enables a camera. Messages are erased on every reconnect and are never recovered. Token expiry or persistent connection failure stops all active capture and requires joining again.
 
@@ -184,4 +188,5 @@ Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) be
 
 ## License
 
-No open-source license has been selected yet. Until a license is added, the source is publicly visible but all rights remain reserved.
+Concord is available under the [MIT License](LICENSE). Bundled fonts retain their
+[own license](apps/client/src/renderer/assets/fonts/LICENSE.txt).

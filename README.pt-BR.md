@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/Jovem-Blood/Concord/releases/latest"><img alt="Versão mais recente" src="https://img.shields.io/github/v/release/Jovem-Blood/Concord?include_prereleases&sort=semver&style=flat-square&color=FBC437&labelColor=12151A" /></a>
-  <a href="https://github.com/Jovem-Blood/Concord/actions/workflows/release.yml"><img alt="Workflow de release desktop" src="https://github.com/Jovem-Blood/Concord/actions/workflows/release.yml/badge.svg" /></a>
+  <a href="https://github.com/Jovem-Blood/Concord/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Jovem-Blood/Concord/actions/workflows/ci.yml/badge.svg?branch=main" /></a>
   <img alt="Node.js 22.12 a 24" src="https://img.shields.io/badge/Node.js-22.12%E2%80%9324-FBC437?style=flat-square&labelColor=12151A" />
   <img alt="Windows e Linux" src="https://img.shields.io/badge/desktop-Windows%20%7C%20Linux-F7F7F4?style=flat-square&labelColor=12151A" />
 </p>
@@ -157,18 +157,23 @@ O build web fica em `apps/client/dist-web`. `pnpm make` gera artefatos de releas
 
 Referências úteis do projeto:
 
-- [Lista de testes manuais](docs/manual-test-checklist.md)
+- [Lista de testes manuais](docs/manual-test-checklist.pt-BR.md)
 - [Guia de design](design.md)
 - [Guia de contribuição](CONTRIBUTING.md)
 - [Política de segurança](SECURITY.md)
 
 ## Releases
 
+A CI executa checagem de tipos, testes, lint, builds web/servidor e builds Docker
+em pushes para `main` e pull requests. O deploy na máquina auto-hospedada é manual.
+O download corresponde à última release com tag; a `main` pode conter trabalho
+mais recente.
+
 Tags SemVer como `v0.1.0` executam `.github/workflows/release.yml`. A tag deve corresponder a `apps/client/package.json` e apontar para um commit presente em `main`. O workflow verifica o projeto, cria os artefatos de Windows e Linux, gera checksums SHA-256 e publica uma GitHub Release.
 
 ## Privacidade e segurança
 
-O Electron usa `nodeIntegration: false`, `contextIsolation: true`, sandbox e uma Content Security Policy restritiva. O preload expõe apenas operações de captura. Seleções de fonte são vinculadas à janela solicitante, expiram em dez segundos e são consumidas uma vez.
+O Electron usa `nodeIntegration: false`, `contextIsolation: true`, sandbox e uma Content Security Policy restritiva. O preload expõe apenas operações de captura e escrita de texto na área de transferência. Seleções de fonte são vinculadas à janela solicitante, expiram em dez segundos e são consumidas uma vez.
 
 O microfone é solicitado somente quando o usuário pressiona o controle e nunca ativa uma câmera. Mensagens são apagadas a cada reconexão e nunca são recuperadas. Expiração de token ou falha persistente de conexão encerra todas as capturas e exige uma nova entrada.
 
@@ -184,4 +189,5 @@ Issues e pull requests são bem-vindos. Leia [CONTRIBUTING.md](CONTRIBUTING.md) 
 
 ## Licença
 
-Ainda não foi escolhida uma licença open source. Até que uma licença seja adicionada, o código-fonte está publicamente visível, mas todos os direitos permanecem reservados.
+O Concord está disponível sob a [Licença MIT](LICENSE). As fontes incluídas mantêm
+sua [própria licença](apps/client/src/renderer/assets/fonts/LICENSE.txt).
