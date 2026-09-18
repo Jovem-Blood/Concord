@@ -56,6 +56,7 @@ function setup() {
   vi.stubGlobal('RTCPeerConnection', FakePeer)
   const presence = { participants: [{ identity: 'local', name: 'Local' }, { identity: 'remote', name: 'Remote' }], tracks: [] as { sessionId: string; trackName: string; kind: string; source: 'microphone' | 'screen-video' | 'screen-audio'; participantIdentity: string; participantName: string }[] }
   let nextRoomStatus = 200
+  let roomFailures = 0
   let nextSessionStatus = 200
   const calls: { path: string; body: Record<string, unknown> }[] = []
   const fetcher = vi.fn(async (url: string, options: RequestInit) => {
@@ -64,7 +65,8 @@ function setup() {
     calls.push({ path, body })
     if (path === 'room') {
       const status = nextRoomStatus
-      nextRoomStatus = 200
+      if (roomFailures > 0) roomFailures--
+      if (roomFailures === 0) nextRoomStatus = 200
       return new Response(JSON.stringify(presence), { status })
     }
     if (path === 'session') {
@@ -99,6 +101,7 @@ function setup() {
   return {
     service, presence, calls, states, snapshots, connect, stream,
     failNextPoll: (status: number) => { nextRoomStatus = status },
+    failRoomPolls: (count: number, status = 500) => { roomFailures = count; nextRoomStatus = status },
     failNextSession: (status: number) => { nextSessionStatus = status },
   }
 }
@@ -175,6 +178,41 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     expect(capture.tracks[0]!.readyState).toBe('live')
     expect(states).toContain('reconnecting')
     expect(states[states.length - 1]).toBe('connected')
+  })
+
+  it('keeps media alive through a brief ICE disconnect', async () => {
+    const { connect, service, stream, states } = setup()
+    await connect()
+    const capture = stream(false)
+    await service.publishScreen(capture.media, '720p')
+    const peer = FakePeer.instances[0]!
+
+    peer.connectionState = 'disconnected'
+    peer.onconnectionstatechange?.()
+    await vi.advanceTimersByTimeAsync(6_000)
+
+    expect(FakePeer.instances).toHaveLength(1)
+    expect(capture.tracks[0]!.readyState).toBe('live')
+    peer.connectionState = 'connected'
+    peer.onconnectionstatechange?.()
+    expect(states[states.length - 1]).toBe('connected')
+  })
+
+  it('keeps capture and retries after a prolonged signaling outage', async () => {
+    const { connect, service, stream, states, failRoomPolls } = setup()
+    await connect()
+    const capture = stream(false)
+    await service.publishScreen(capture.media, '720p')
+    failRoomPolls(8)
+
+    await vi.advanceTimersByTimeAsync(100_000)
+    expect(states[states.length - 1]).toBe('reconnecting')
+    expect(capture.tracks[0]!.readyState).toBe('live')
+    expect(FakePeer.instances).toHaveLength(1)
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(states[states.length - 1]).toBe('connected')
+    expect(FakePeer.instances).toHaveLength(1)
   })
 
   it('does not enter a reconnect loop when initial publication fails', async () => {

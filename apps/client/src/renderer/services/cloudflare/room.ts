@@ -201,9 +201,13 @@ export class CloudflareRoomService {
       if (pc.connectionState === 'connected') {
         this.disconnectedAt = 0
         this.connectionListener?.('connected')
-      } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+      } else if (pc.connectionState === 'disconnected') {
         this.disconnectedAt ||= Date.now()
-        this.needsReset ||= pc.connectionState === 'failed'
+        // ICE can report a short-lived disconnect while changing routes or recovering
+        // packets. Keep the current tracks alive and only rebuild after the grace period.
+        this.signalReconnecting(false)
+      } else if (pc.connectionState === 'failed') {
+        this.disconnectedAt ||= Date.now()
         this.signalReconnecting()
       }
     }
@@ -318,18 +322,25 @@ export class CloudflareRoomService {
     for (let offset = 0; offset < added.length; offset += 32) {
       const batch = added.slice(offset, offset + 32)
       const pc = await this.ensurePeer()
-      const result = await this.api<SfuResponse>('tracks', {
-        tracks: batch.map((t) => ({ location: 'remote', sessionId: t.sessionId, trackName: t.trackName })),
-      })
-      // ontrack may fire during setRemoteDescription, so register mids before negotiation.
-      for (const track of result.tracks ?? []) {
-        const source = batch.find((t) => t.sessionId === track.sessionId && t.trackName === track.trackName)
-        if (source && track.mid && !track.errorCode) this.subscriptions.set(trackKey(source), { source, mid: track.mid })
+      try {
+        const result = await this.api<SfuResponse>('tracks', {
+          tracks: batch.map((t) => ({ location: 'remote', sessionId: t.sessionId, trackName: t.trackName })),
+        })
+        // ontrack may fire during setRemoteDescription, so register mids before negotiation.
+        for (const track of result.tracks ?? []) {
+          const source = batch.find((t) => t.sessionId === track.sessionId && t.trackName === track.trackName)
+          if (source && track.mid && !track.errorCode) this.subscriptions.set(trackKey(source), { source, mid: track.mid })
+        }
+        await this.negotiate(result, pc)
+        if (batch.some((t) => !this.subscriptions.has(trackKey(t)))) throw new Error('Incomplete subscription response')
+        await this.waitConnected(pc)
+        this.emitSnapshot()
+      } catch (error) {
+        // A tracks/new request or SDP exchange may have partially changed either side.
+        // Recreate the session on the next pass rather than layering another offer on it.
+        this.needsReset = true
+        throw error
       }
-      await this.negotiate(result, pc)
-      if (batch.some((t) => !this.subscriptions.has(trackKey(t)))) throw new Error('Incomplete subscription response')
-      await this.waitConnected(pc)
-      this.emitSnapshot()
     }
   }
 
@@ -344,12 +355,13 @@ export class CloudflareRoomService {
       }).catch((error: unknown) => {
         if (generation !== this.generation) return
         this.failures++
-        if ((error instanceof SignalingError && error.status === 401) || this.failures >= 8) {
+        if (error instanceof SignalingError && error.status === 401) {
           void this.disconnect().then(() => this.connectionListener?.('disconnected'))
           return
         }
-        this.needsReset = true
-        this.signalReconnecting()
+        // Signaling and media use separate paths. A temporary API outage must not tear
+        // down a healthy WebRTC connection (or stop capture); keep retrying in place.
+        this.signalReconnecting(false)
       }).finally(() => {
         if (generation === this.generation && this.credentials) this.schedule()
       })
@@ -396,10 +408,10 @@ export class CloudflareRoomService {
     this.disconnectedAt = 0
   }
 
-  private signalReconnecting(): void {
+  private signalReconnecting(resetPeer = true): void {
     if (!this.chatSuspended) this.chat.reset()
     this.chatSuspended = true
-    this.needsReset = true
+    if (resetPeer) this.needsReset = true
     this.connectionListener?.('reconnecting')
   }
   private async ensureChat(): Promise<void> {

@@ -38,6 +38,9 @@ function createMainWindow(): void {
       contextIsolation: true,
       sandbox: true,
       webSecurity: true,
+      // Screen capture, WebRTC, and presence timers must continue when the call window
+      // is minimized while the user works in the window being shared.
+      backgroundThrottling: false,
     },
   })
 
