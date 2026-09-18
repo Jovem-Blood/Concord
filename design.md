@@ -127,7 +127,7 @@ The room is a full-viewport application shell:
 
 The stage has a compact heading, the media canvas, and a bottom control row. Metadata belongs below the image rather than on top of shared content. A single or focused share fills the canvas; multiple shares use a responsive grid with an 8px gap.
 
-At 1100px and below, the participant and chat rails become narrower and call controls hide their secondary labels. At 800px and below, participants become a horizontal strip and chat becomes a right-side overlay. At 540px and below, the top bar wraps, stage padding contracts, and call controls become compact vertical items.
+At 1100px and below, the participant and chat rails become narrower and call controls hide their secondary labels. At 800px and below, participants become a horizontal strip and chat becomes a right-side overlay. At 540px and below, the top bar wraps, stage padding contracts, and all five call controls remain visible in a compact grid without horizontal scrolling. Mobile edges account for device safe areas.
 
 ### Source picker
 
@@ -157,7 +157,9 @@ Text inputs are at least 44px high, use the canvas background, and have an 8px r
 
 ### Participants
 
-A participant row contains an initial avatar, truncated name, human-readable voice or connection state, and a small presence signal. Speaking uses the citrine surface plus an inset signal bar. The `.pen` reference is a spacious 280 × 58px row with a 38px avatar; the room rail intentionally compacts this to a 32px avatar.
+A participant row contains an initial avatar, truncated name, and human-readable voice or connection state. It does not repeat the global connection dot. Speaking uses the citrine surface plus an inset signal bar. The `.pen` reference is a spacious 280 × 58px row with a 38px avatar; the room rail intentionally compacts this to a 32px avatar.
+
+The unused bottom area of the desktop participant rail is reserved for a future local-profile section. That section may expose user-provided profile information, but it must not be represented by instructional microphone copy or an empty placeholder before the feature exists.
 
 ### Media
 

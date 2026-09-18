@@ -354,7 +354,6 @@ onBeforeUnmount(() => {
           <small>Compartilhamento protegido pelo link</small>
         </div>
         <ParticipantList :participants="participants" :voice="voiceControls.voice.value" :speaking="voiceControls.speaking.value" :status="statusLabel" />
-        <p class="sidebar-help">Ative o microfone somente quando quiser falar. Você pode ouvir a sala sem conceder permissão.</p>
       </aside>
 
       <section class="stage">
