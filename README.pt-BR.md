@@ -34,7 +34,7 @@ O Concord foi feito para pequenos grupos que precisam de uma sala rapidamente �
 - Criação e entrada em sala privada por código ou link de convite.
 - Várias telas simultâneas, foco em um stream e lista de participantes.
 - Seletor nativo de fontes no desktop com miniaturas de monitores e janelas.
-- Perfis de captura `1080p30` para movimento e `1080p15` para texto.
+- Resoluções de captura selecionáveis em `720p30` (padrão) e `1080p30`, sempre a 30 FPS.
 - Áudio do sistema opcional, desligado por padrão.
 - Microfone em tempo real, mute, silenciar sala e indicador local de fala.
 - Chat de texto confiável e ordenado, sem persistência: até 2.000 caracteres por mensagem e 500 mensagens em memória.

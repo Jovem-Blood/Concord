@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { CaptureProfile, CaptureSourceDTO } from '../shared/capture'
+import type { CaptureResolution, CaptureSourceDTO } from '../shared/capture'
 import type { AppError } from '../shared/errors'
 import ConcordBrand from './components/ConcordBrand.vue'
 import CallControls from './components/CallControls.vue'
@@ -192,19 +192,19 @@ async function cancelPicker(): Promise<void> {
 async function startSharing(
   source: CaptureSourceDTO | undefined,
   includeSystemAudio: boolean,
-  profile: CaptureProfile,
+  resolution: CaptureResolution,
 ): Promise<void> {
   shareState.value = 'starting'
   errorMessage.value = ''
   shareNotice.value = ''
 
   try {
-    const stream = await captureProvider.capture({ source, includeSystemAudio, profile })
+    const stream = await captureProvider.capture({ source, includeSystemAudio, resolution })
 
     localStream.value = stream
     const videoTrack = stream.getVideoTracks()[0]
     if (!videoTrack) throw new Error('Missing video track')
-    videoTrack.contentHint = profile === 'smooth' ? 'motion' : 'detail'
+    videoTrack.contentHint = 'motion'
     videoTrack.onended = () => void stopSharing()
 
     if (includeSystemAudio && stream.getAudioTracks().length === 0 && captureEnvironment === 'web') {
@@ -215,7 +215,7 @@ async function startSharing(
     }
 
     if (localPreview.value) localPreview.value.srcObject = stream
-    await roomService.publishScreen(stream, profile)
+    await roomService.publishScreen(stream, resolution)
     shareState.value = 'sharing'
     screenSoundOpen = true
     soundPlayer.play('screen-open')

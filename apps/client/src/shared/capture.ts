@@ -11,7 +11,7 @@ export type CaptureSelection = {
   includeSystemAudio: boolean
 }
 
-export type CaptureProfile = 'smooth' | 'sharp'
+export type CaptureResolution = '720p' | '1080p'
 
 export type CaptureAPI = {
   listSources: () => Promise<CaptureSourceDTO[]>

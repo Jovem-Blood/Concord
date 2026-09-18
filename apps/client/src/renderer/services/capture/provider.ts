@@ -1,4 +1,4 @@
-import type { CaptureProfile, CaptureSourceDTO } from '../../../shared/capture'
+import type { CaptureResolution, CaptureSourceDTO } from '../../../shared/capture'
 import { AppError } from '../../../shared/errors'
 
 export type CaptureEnvironment = 'electron' | 'web'
@@ -12,7 +12,7 @@ export type CaptureCapabilities = {
 export type CaptureRequest = {
   source?: CaptureSourceDTO
   includeSystemAudio: boolean
-  profile: CaptureProfile
+  resolution: CaptureResolution
 }
 
 export interface CaptureProvider {
@@ -29,12 +29,18 @@ type ExtendedDisplayMediaOptions = DisplayMediaStreamOptions & {
   systemAudio?: 'include' | 'exclude'
 }
 
-function videoConstraints(profile: CaptureProfile): MediaTrackConstraints {
-  return {
-    width: { ideal: 1920 },
-    height: { ideal: 1080 },
-    frameRate: { ideal: profile === 'smooth' ? 30 : 15 },
-  }
+function videoConstraints(resolution: CaptureResolution): MediaTrackConstraints {
+  return resolution === '720p'
+    ? {
+        width: { ideal: 1280, max: 1280 },
+        height: { ideal: 720, max: 720 },
+        frameRate: { ideal: 30, max: 30 },
+      }
+    : {
+        width: { ideal: 1920, max: 1920 },
+        height: { ideal: 1080, max: 1080 },
+        frameRate: { ideal: 30, max: 30 },
+      }
 }
 
 function requireDisplayCapture(): typeof navigator.mediaDevices.getDisplayMedia {
@@ -62,7 +68,7 @@ class BrowserCaptureProvider implements CaptureProvider {
   async capture(request: CaptureRequest): Promise<MediaStream> {
     const getDisplayMedia = requireDisplayCapture()
     const options: ExtendedDisplayMediaOptions = {
-      video: videoConstraints(request.profile),
+      video: videoConstraints(request.resolution),
       audio: request.includeSystemAudio,
       monitorTypeSurfaces: 'include',
       selfBrowserSurface: 'exclude',
@@ -99,7 +105,7 @@ class ElectronCaptureProvider implements CaptureProvider {
 
     try {
       return await requireDisplayCapture()({
-        video: videoConstraints(request.profile),
+        video: videoConstraints(request.resolution),
         audio: request.includeSystemAudio,
       })
     } catch (error) {

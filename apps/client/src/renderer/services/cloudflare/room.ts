@@ -1,5 +1,5 @@
 import { AppError } from '../../../shared/errors'
-import type { CaptureProfile } from '../../../shared/capture'
+import type { CaptureResolution } from '../../../shared/capture'
 import { serverUrl, type JoinResponse } from '../server'
 import type { MediaSource, PublishedTrack, RemoteShareView, RemoteVoiceTrack, RoomPresence, RoomSnapshot, SfuResponse } from './types'
 import { EphemeralChat, validChatContent, type ChatSnapshot } from '../chat'
@@ -35,7 +35,7 @@ export class CloudflareRoomService {
   private localName = ''
   private chatSuspended = false
   private chatRequested = false
-  private profile: CaptureProfile = 'smooth'
+  private resolution: CaptureResolution = '720p'
   private needsReset = false
   private disconnectedAt = 0
   private failures = 0
@@ -75,7 +75,7 @@ export class CloudflareRoomService {
     }
   }
 
-  async publishScreen(stream: MediaStream, profile: CaptureProfile): Promise<void> {
+  async publishScreen(stream: MediaStream, resolution: CaptureResolution): Promise<void> {
     return this.enqueue(async () => {
       if (!this.credentials) throw new AppError('NETWORK_DISCONNECTED', 'Você não está conectado a uma sala.')
       if (!stream.getVideoTracks().some((t) => t.readyState === 'live')) {
@@ -84,7 +84,7 @@ export class CloudflareRoomService {
       try {
         await this.unpublish(['screen-video', 'screen-audio'])
         this.localStream = stream
-        this.profile = profile
+        this.resolution = resolution
         await this.publish()
       } catch (error) {
         this.localStream = null
@@ -239,8 +239,8 @@ export class CloudflareRoomService {
     for (const { track, source, stream: mediaStream } of tracks) {
       const transceiver = pc.addTransceiver(track, {
       direction: 'sendonly', ...(mediaStream ? { streams: [mediaStream] } : {}),
-      sendEncodings: [{ maxBitrate: source === 'microphone' ? 64_000 : track.kind === 'audio' ? 128_000 : this.profile === 'smooth' ? 5_000_000 : 3_000_000,
-        ...(track.kind === 'video' ? { maxFramerate: this.profile === 'smooth' ? 30 : 15 } : {}) }],
+      sendEncodings: [{ maxBitrate: source === 'microphone' ? 64_000 : track.kind === 'audio' ? 128_000 : this.resolution === '720p' ? 3_000_000 : 5_000_000,
+        ...(track.kind === 'video' ? { maxFramerate: 30 } : {}) }],
       })
       // Prefer Opus for speech without rewriting negotiated SDP.
       if (source === 'microphone' && typeof RTCRtpSender !== 'undefined') {

@@ -136,7 +136,7 @@ The capture picker is a focused utility, not a decorative modal.
 - Maximum size: 960 × 760px within the viewport.
 - Structure: header, scrollable source area, options, and confirmation footer.
 - Source previews preserve a 16:9 ratio.
-- Quality choices distinguish motion (`1080p · 30 FPS`) from sharpness (`1080p · 15 FPS`).
+- Quality uses Concord-styled selectors: resolution offers `720p` by default or `1080p`, while frame rate is visibly fixed at `30 FPS`.
 - System audio is a separate switch with contextual help and a warning when voice is active.
 - On narrow screens, options stack and footer actions expand to the available width.
 

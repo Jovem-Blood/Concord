@@ -116,7 +116,7 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     const { connect, service, calls, stream } = setup()
     await connect()
     const capture = stream()
-    await service.publishScreen(capture.media, 'smooth')
+    await service.publishScreen(capture.media, '720p')
     expect(calls.find((c) => c.path === 'tracks')!.body).toMatchObject({
       sessionDescription: { type: 'offer' },
       tracks: [{ location: 'local', kind: 'video', source: 'screen-video', mid: '0' }, { location: 'local', kind: 'audio', source: 'screen-audio', mid: '1' }],
@@ -135,7 +135,7 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     const microphone = new FakeTrack('audio', 'microphone')
     await service.publishMicrophone(microphone as unknown as MediaStreamTrack)
     const capture = stream(true)
-    await service.publishScreen(capture.media, 'smooth')
+    await service.publishScreen(capture.media, '720p')
     expect((calls.filter((c) => c.path === 'tracks')[0]!.body.tracks as { source: string }[]).map((t) => t.source)).toEqual(['microphone'])
     expect((calls.filter((c) => c.path === 'tracks')[1]!.body.tracks as { source: string }[]).map((t) => t.source)).toEqual(['screen-video', 'screen-audio'])
     await service.unpublishScreen()
@@ -164,7 +164,7 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     const { connect, service, calls, stream, states } = setup()
     await connect()
     const capture = stream(false)
-    await service.publishScreen(capture.media, 'sharp')
+    await service.publishScreen(capture.media, '1080p')
     const oldPeer = FakePeer.instances[0]!
     oldPeer.connectionState = 'failed'
     oldPeer.onconnectionstatechange?.()
@@ -183,7 +183,7 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     const capture = stream(false)
     failNextSession(500)
 
-    await expect(service.publishScreen(capture.media, 'smooth')).rejects.toThrow('não pôde ser transmitida')
+    await expect(service.publishScreen(capture.media, '720p')).rejects.toThrow('não pôde ser transmitida')
     expect(capture.tracks[0]!.readyState).toBe('ended')
     expect(states[states.length - 1]).toBe('connected')
 
@@ -196,7 +196,7 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     const { connect, service, stream, failNextPoll, states, snapshots } = setup()
     await connect()
     const capture = stream(false)
-    await service.publishScreen(capture.media, 'smooth')
+    await service.publishScreen(capture.media, '720p')
     failNextPoll(401)
     await vi.advanceTimersByTimeAsync(3000)
     expect(capture.tracks[0]!.readyState).toBe('ended')

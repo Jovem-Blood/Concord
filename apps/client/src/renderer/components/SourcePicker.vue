@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { CaptureProfile, CaptureSourceDTO } from '../../shared/capture'
+import type { CaptureResolution, CaptureSourceDTO } from '../../shared/capture'
 import { captureProvider } from '../services/capture/provider'
+import Select from './Select.vue'
 
 const emit = defineEmits<{
   cancel: []
-  share: [source: CaptureSourceDTO | undefined, includeAudio: boolean, profile: CaptureProfile]
+  share: [source: CaptureSourceDTO | undefined, includeAudio: boolean, resolution: CaptureResolution]
 }>()
 defineProps<{ voiceActive: boolean }>()
 
@@ -13,7 +14,12 @@ const isElectron = captureProvider.capabilities.environment === 'electron'
 const sources = ref<CaptureSourceDTO[]>([])
 const selectedId = ref('')
 const includeAudio = ref(false)
-const profile = ref<CaptureProfile>('smooth')
+const resolution = ref<CaptureResolution>('720p')
+const resolutionOptions = [
+  { value: '720p', label: '720p', description: 'Recomendado' },
+  { value: '1080p', label: '1080p', description: 'Alta definição' },
+] as const
+const frameRateOptions = [{ value: '30', label: '30 FPS', description: 'Fixo' }] as const
 const loading = ref(isElectron)
 const error = ref('')
 const dialog = ref<HTMLElement | null>(null)
@@ -34,6 +40,10 @@ function trapFocus(event: KeyboardEvent): void {
 }
 
 const selectedSource = computed(() => sources.value.find((source) => source.id === selectedId.value))
+
+function setResolution(value: string): void {
+  if (value === '720p' || value === '1080p') resolution.value = value
+}
 
 onMounted(async () => {
   dialog.value?.focus({ preventScroll: true })
@@ -96,16 +106,8 @@ onBeforeUnmount(() => previousFocus?.focus({ preventScroll: true }))
         <div class="picker-options">
           <fieldset class="quality-options">
             <legend>Qualidade da transmissão</legend>
-            <label class="option-card">
-              <input v-model="profile" type="radio" name="capture-profile" value="smooth" />
-              <span><strong>Movimento</strong><small>1080p · 30 FPS</small></span>
-              <em>Jogos e vídeo</em>
-            </label>
-            <label class="option-card">
-              <input v-model="profile" type="radio" name="capture-profile" value="sharp" />
-              <span><strong>Nitidez</strong><small>1080p · 15 FPS</small></span>
-              <em>Texto e código</em>
-            </label>
+            <Select :model-value="resolution" label="Resolução" :options="resolutionOptions" @update:model-value="setResolution" />
+            <Select label="Taxa de quadros" model-value="30" :options="frameRateOptions" disabled />
           </fieldset>
           <div class="audio-option">
             <div><strong id="system-audio-label">Áudio do sistema · {{ includeAudio ? 'Ligado' : 'Desligado' }}</strong><small id="system-audio-help">{{ isElectron ? 'Inclui o som de outros aplicativos.' : 'Disponível quando a fonte e o navegador permitirem.' }}</small></div>
@@ -122,7 +124,7 @@ onBeforeUnmount(() => previousFocus?.focus({ preventScroll: true }))
           <button
             class="button primary"
             :disabled="isElectron && !selectedSource"
-            @click="emit('share', selectedSource, includeAudio, profile)"
+            @click="emit('share', selectedSource, includeAudio, resolution)"
           >
             {{ isElectron ? 'Compartilhar fonte' : 'Continuar' }}
           </button>

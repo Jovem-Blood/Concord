@@ -34,7 +34,7 @@ Concord is designed for small groups that need a room quickly—not another acco
 - Create or join a private room by code or invite link.
 - Share multiple screens at once, focus a stream, and see who is in the room.
 - Native desktop source picker with monitor/window previews.
-- `1080p30` motion and `1080p15` text-oriented capture profiles.
+- Selectable `720p30` (default) and `1080p30` capture resolutions with a fixed 30 FPS rate.
 - Optional system audio, disabled by default.
 - Real-time microphone audio, mute controls, room audio controls, and local speaking feedback.
 - Reliable, ordered text chat with no persistence: up to 2,000 characters per message and 500 messages in memory.
