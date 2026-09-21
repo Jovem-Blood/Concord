@@ -24,6 +24,7 @@ import type { ChatSnapshot } from './services/chat'
 import type { ParticipantView, RemoteShareView } from './services/cloudflare/types'
 import { PresenceSoundNotifier, soundPlayer } from './services/sounds'
 import { requestJoinToken } from './services/server'
+import { logClient } from './services/telemetry'
 
 const roomService = new CloudflareRoomService()
 const presenceSounds = new PresenceSoundNotifier()
@@ -130,6 +131,7 @@ async function joinRoom(roomCode: string): Promise<void> {
     presenceSounds.update(participants.value)
     soundPlayer.play('join')
   } catch (error) {
+    logClient('error', 'room.join.failed', { error, code: 'ROOM_TOKEN_FAILED' })
     roomState.value = 'error'
     errorMessage.value = getErrorMessage(error)
   }
@@ -174,7 +176,8 @@ async function copyLink(): Promise<void> {
     await writeClipboard(createRoomLink(publicWebAppUrl, currentRoomCode.value))
     copied.value = true
     window.setTimeout(() => (copied.value = false), 1500)
-  } catch {
+  } catch (error) {
+    logClient('warn', 'clipboard.write.failed', { error })
     errorMessage.value = 'Não foi possível copiar o link desta sala.'
   }
 }
@@ -220,6 +223,7 @@ async function startSharing(
     screenSoundOpen = true
     soundPlayer.play('screen-open')
   } catch (error) {
+    logClient('error', 'screen.start.failed', { error })
     await captureProvider.cancel()
     await stopSharing()
     if (error instanceof DOMException && error.name === 'NotAllowedError') {

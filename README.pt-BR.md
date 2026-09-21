@@ -140,6 +140,10 @@ Execute exatamente uma instância de `server`: presença, tokens e publicações
 | `PUBLIC_SERVER_URL` | URL pública da API incorporada ao build web do Compose |
 | `VITE_SERVER_URL` | URL da API incorporada ao cliente |
 | `VITE_WEB_APP_URL` | URL-base usada nos convites copiados pelo desktop |
+| `LOG_LEVEL` | Nível mínimo dos logs do servidor (`error`, `warn`, `info`, `debug`); padrão `info` |
+| `VITE_LOG_LEVEL` | Nível mínimo do console do cliente; padrão `info` |
+
+Os logs do servidor são JSON estruturado. O cliente envia erros, avisos, perda de conexão e recuperação para `/v1/client-events`; uma fila limitada em memória tenta reenviar quando a conexão volta. Os relatos contêm ID temporário do cliente, plataforma, evento, nível e classificação limitada do erro. Não incluem código da sala, nome, token, SDP ou conteúdo do chat. Eventos pendentes se perdem ao fechar o aplicativo.
 
 O Concord usa STUN da Cloudflare e não configura relay TURN. Portanto, redes que exigem relay não são suportadas. A disponibilidade de áudio na captura web depende do navegador, sistema operacional e fonte escolhida; quando o áudio não está disponível, o vídeo continua com um aviso.
 

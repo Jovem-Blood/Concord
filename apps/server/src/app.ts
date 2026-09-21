@@ -59,6 +59,35 @@ export async function buildApp(
   })
   await app.register(rateLimit, { max: 30, timeWindow: '1 minute' })
 
+  // Anonymous reports also cover failures before a participant can join. Keep the
+  // payload deliberately narrow so client secrets and room content cannot be logged.
+  app.post('/v1/client-events', {
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+    bodyLimit: 2048,
+  }, async (request, reply) => {
+    const body = request.body
+    if (!record(body) ||
+      !['error', 'warn', 'info', 'debug'].includes(String(body.level)) ||
+      typeof body.event !== 'string' || !/^[a-z][a-z0-9_.-]{2,63}$/.test(body.event) ||
+      typeof body.clientId !== 'string' || !/^[a-f0-9-]{36}$/.test(body.clientId) ||
+      (body.code !== undefined && (typeof body.code !== 'string' || !/^[A-Z][A-Z0-9_]{0,63}$/.test(body.code))) ||
+      (body.reason !== undefined && (typeof body.reason !== 'string' ||
+        !/^(?:[1-5]\d\d|HTTP_ERROR|UnknownError|DOMException|AbortError|NetworkError|NotAllowedError|NotFoundError|NotReadableError|SecurityError|InvalidStateError|OperationError|TimeoutError|TypeError|RangeError|SyntaxError|ReferenceError|Error)$/.test(body.reason))) ||
+      (body.attempt !== undefined && (!Number.isInteger(body.attempt) || Number(body.attempt) < 0 || Number(body.attempt) > 1000)) ||
+      (body.platform !== 'web' && body.platform !== 'desktop')) {
+      return reply.code(400).send({ error: 'INVALID_CLIENT_EVENT' })
+    }
+    const details = { event: 'client.event', clientEvent: body.event, clientId: body.clientId,
+      platform: body.platform, code: body.code, reason: body.reason, attempt: body.attempt }
+    switch (body.level) {
+      case 'error': request.log.error(details); break
+      case 'warn': request.log.warn(details); break
+      case 'debug': request.log.debug(details); break
+      default: request.log.info(details)
+    }
+    return reply.code(204).send()
+  })
+
   function authenticate(request: FastifyRequest): Participant {
     const token = request.headers.authorization?.match(/^Bearer (\S+)$/)?.[1]
     const member = token ? members.get(tokenHash(token)) : undefined
@@ -79,13 +108,13 @@ export async function buildApp(
     member.channels.clear()
     member.dataEstablished = false
     if (sessionId && dataChannels.length) {
-      await sfu.request(sessionId, 'datachannels/close', { dataChannels }).catch(() => {
-        app.log.warn({ event: 'sfu.data.cleanup.failed' })
+      await sfu.request(sessionId, 'datachannels/close', { dataChannels }).catch((error: unknown) => {
+        app.log.warn({ event: 'sfu.data.cleanup.failed', err: error })
       })
     }
     if (sessionId && tracks.length) {
-      await sfu.request(sessionId, 'tracks/close', { tracks, force: true }).catch(() => {
-        app.log.warn({ event: 'sfu.cleanup.failed' })
+      await sfu.request(sessionId, 'tracks/close', { tracks, force: true }).catch((error: unknown) => {
+        app.log.warn({ event: 'sfu.cleanup.failed', err: error })
       })
     }
   }
@@ -94,7 +123,7 @@ export async function buildApp(
     for (const [key, member] of members) {
       if (!active(member) && !member.busy) {
         members.delete(key)
-        void closeSession(member)
+        void closeSession(member).catch((error: unknown) => app.log.error({ event: 'session.reap.failed', err: error }))
       }
     }
   }, 15_000)
@@ -283,7 +312,11 @@ export async function buildApp(
   app.setErrorHandler((error, request, reply) => {
     const candidate = Number((error as { statusCode?: number }).statusCode ?? 500)
     const statusCode = candidate >= 400 && candidate < 500 ? candidate : 500
-    request.log.error({ event: 'request.failed', statusCode })
+    const details = { event: 'request.failed', statusCode, method: request.method, path: request.routeOptions.url ?? 'unmatched',
+      err: error }
+    if (statusCode >= 500) request.log.error(details)
+    else if (statusCode === 401 || statusCode === 429) request.log.info(details)
+    else request.log.warn(details)
     void reply.code(statusCode).send({ error: 'REQUEST_FAILED', message: 'The request could not be completed.' })
   })
   return app

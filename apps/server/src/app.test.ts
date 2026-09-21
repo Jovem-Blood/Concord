@@ -45,6 +45,15 @@ async function fixture() {
 }
 
 describe('Cloudflare room signaling', () => {
+  it('accepts bounded anonymous client diagnostics without storing arbitrary content', async () => {
+    const { app } = await fixture()
+    const payload = { level: 'warn', event: 'room.reconnecting', clientId: '12345678-1234-1234-1234-123456789abc',
+      platform: 'web', reason: 'NetworkError', attempt: 2 }
+    expect((await app.inject({ method: 'POST', url: '/v1/client-events', payload })).statusCode).toBe(204)
+    expect((await app.inject({ method: 'POST', url: '/v1/client-events', payload: { ...payload, reason: 'Bearer secret' } })).statusCode).toBe(400)
+    expect((await app.inject({ method: 'POST', url: '/v1/client-events', payload: { ...payload, level: 'fatal' } })).statusCode).toBe(400)
+  })
+
   it('issues opaque credentials and presence without creating idle SFU sessions', async () => {
     const { app, sfu, join } = await fixture()
     const { data, headers } = await join()

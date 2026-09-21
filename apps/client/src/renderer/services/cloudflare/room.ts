@@ -4,6 +4,7 @@ import { serverUrl, type JoinResponse } from '../server'
 import type { MediaSource, PublishedTrack, RemoteShareView, RemoteVoiceTrack, RoomPresence, RoomSnapshot, SfuResponse } from './types'
 import { EphemeralChat, validChatContent, type ChatSnapshot } from '../chat'
 import { ChatTransport } from './chat-transport'
+import { logClient } from '../telemetry'
 
 type ConnectionState = 'connected' | 'reconnecting' | 'disconnected'
 type Subscription = { source: PublishedTrack; mid: string }
@@ -39,6 +40,16 @@ export class CloudflareRoomService {
   private needsReset = false
   private disconnectedAt = 0
   private failures = 0
+  private connectionState: ConnectionState | null = null
+
+  private connection(state: ConnectionState, error?: unknown): void {
+    if (this.connectionState !== state) {
+      logClient(state === 'connected' ? 'info' : state === 'disconnected' ? 'error' : 'warn',
+        `room.${state}`, { error, attempt: this.failures })
+      this.connectionState = state
+    }
+    this.connectionListener?.(state)
+  }
 
   onSnapshot(listener: (snapshot: RoomSnapshot) => void): void { this.snapshotListener = listener }
   onConnection(listener: (state: ConnectionState) => void): void { this.connectionListener = listener }
@@ -47,7 +58,10 @@ export class CloudflareRoomService {
     this.chat.setOpen(open)
     if (open) {
       this.chatRequested = true
-      void this.enqueue(() => this.ensureChat()).catch(() => this.chat.setReady(false))
+      void this.enqueue(() => this.ensureChat()).catch((error: unknown) => {
+        logClient('warn', 'chat.setup.failed', { error })
+        this.chat.setReady(false)
+      })
     }
   }
   sendChat(content: string): boolean {
@@ -67,9 +81,10 @@ export class CloudflareRoomService {
     try {
       await this.enqueue(() => this.synchronize())
       if (generation !== this.generation) return
-      this.connectionListener?.('connected')
+      this.connection('connected')
       this.schedule()
     } catch (error) {
+      logClient('error', 'room.connect.failed', { error, code: 'ROOM_CONNECT_FAILED' })
       await this.disconnect()
       throw new AppError('ROOM_CONNECT_FAILED', 'Não foi possível conectar à sala.', { cause: error })
     }
@@ -92,7 +107,8 @@ export class CloudflareRoomService {
         this.disposePeer()
         // Restore another active source, but never retry the failed capture itself.
         if (this.microphone?.readyState === 'live') this.signalReconnecting()
-        else this.connectionListener?.('connected')
+        else this.connection('connected')
+        logClient('error', 'screen.publish.failed', { error, code: 'TRACK_PUBLISH_FAILED' })
         throw new AppError('TRACK_PUBLISH_FAILED', 'A captura iniciou, mas não pôde ser transmitida.', { cause: error })
       }
     })
@@ -103,7 +119,8 @@ export class CloudflareRoomService {
     this.localStream?.getTracks().forEach((track) => track.stop())
     this.localStream = null
     return this.enqueue(async () => {
-      try { await this.unpublish(['screen-video', 'screen-audio']) } catch {
+      try { await this.unpublish(['screen-video', 'screen-audio']) } catch (error) {
+        logClient('warn', 'screen.unpublish.failed', { error })
         this.needsReset = true
         this.signalReconnecting()
       }
@@ -120,7 +137,8 @@ export class CloudflareRoomService {
         track.stop()
         this.disposePeer()
         if (this.localStream?.getVideoTracks().some((t) => t.readyState === 'live')) this.signalReconnecting()
-        else this.connectionListener?.('connected')
+        else this.connection('connected')
+        logClient('error', 'microphone.publish.failed', { error, code: 'TRACK_PUBLISH_FAILED' })
         throw new AppError('TRACK_PUBLISH_FAILED', 'Não foi possível transmitir o microfone. Tente novamente.', { cause: error })
       }
     })
@@ -129,7 +147,10 @@ export class CloudflareRoomService {
     this.microphone?.stop()
     this.microphone = null
     return this.enqueue(async () => {
-      try { await this.unpublish(['microphone']) } catch { this.needsReset = true; this.signalReconnecting() }
+      try { await this.unpublish(['microphone']) } catch (error) {
+        logClient('warn', 'microphone.unpublish.failed', { error })
+        this.needsReset = true; this.signalReconnecting()
+      }
     })
   }
 
@@ -147,12 +168,14 @@ export class CloudflareRoomService {
     this.presence = { participants: [], tracks: [] }
     this.chatRequested = false
     this.emitSnapshot()
-    await this.queue.catch(() => undefined)
+    await this.queue.catch((error: unknown) => {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) logClient('debug', 'room.queue.cancelled', { error })
+    })
     if (credentials) {
       await fetch(`${serverUrl}/v1/leave`, {
         method: 'POST', headers: { authorization: `Bearer ${credentials.participantToken}` },
         keepalive: true, signal: AbortSignal.timeout(5_000),
-      }).catch(() => undefined)
+      }).catch((error: unknown) => logClient('warn', 'room.leave.failed', { error }))
     }
   }
 
@@ -200,15 +223,15 @@ export class CloudflareRoomService {
       if (this.pc !== pc) return
       if (pc.connectionState === 'connected') {
         this.disconnectedAt = 0
-        this.connectionListener?.('connected')
+        this.connection('connected')
       } else if (pc.connectionState === 'disconnected') {
         this.disconnectedAt ||= Date.now()
         // ICE can report a short-lived disconnect while changing routes or recovering
         // packets. Keep the current tracks alive and only rebuild after the grace period.
-        this.signalReconnecting(false)
+        this.signalReconnecting(false, new Error('WebRTC disconnected'))
       } else if (pc.connectionState === 'failed') {
         this.disconnectedAt ||= Date.now()
-        this.signalReconnecting()
+        this.signalReconnecting(true, new Error('WebRTC failed'))
       }
     }
     return pc
@@ -350,18 +373,20 @@ export class CloudflareRoomService {
       void this.enqueue(() => this.synchronize()).then(() => {
         this.failures = 0
         if (!this.needsReset && (!this.pc || this.pc.connectionState === 'connected' || this.pc.connectionState === 'new')) {
-          this.connectionListener?.('connected')
+          this.connection('connected')
         }
       }).catch((error: unknown) => {
         if (generation !== this.generation) return
         this.failures++
         if (error instanceof SignalingError && error.status === 401) {
-          void this.disconnect().then(() => this.connectionListener?.('disconnected'))
+          logClient('error', 'room.session.expired', { error, attempt: this.failures })
+          void this.disconnect().then(() => this.connection('disconnected', error))
           return
         }
         // Signaling and media use separate paths. A temporary API outage must not tear
         // down a healthy WebRTC connection (or stop capture); keep retrying in place.
-        this.signalReconnecting(false)
+        logClient(this.failures === 1 ? 'warn' : 'debug', 'room.poll.failed', { error, attempt: this.failures })
+        this.signalReconnecting(false, error)
       }).finally(() => {
         if (generation === this.generation && this.credentials) this.schedule()
       })
@@ -408,11 +433,11 @@ export class CloudflareRoomService {
     this.disconnectedAt = 0
   }
 
-  private signalReconnecting(resetPeer = true): void {
+  private signalReconnecting(resetPeer = true, error?: unknown): void {
     if (!this.chatSuspended) this.chat.reset()
     this.chatSuspended = true
     if (resetPeer) this.needsReset = true
-    this.connectionListener?.('reconnecting')
+    this.connection('reconnecting', error)
   }
   private async ensureChat(): Promise<void> {
     try {
@@ -428,7 +453,8 @@ export class CloudflareRoomService {
       await this.chatTransport.synchronize((this.presence.channels ?? []).filter((c) => c.participantIdentity !== this.credentials?.identity))
       this.chatSuspended = false
       this.chat.setReady(this.chatTransport.isReady())
-    } catch {
+    } catch (error) {
+      logClient('warn', 'chat.transport.failed', { error })
       // A failed SCTP offer may leave the shared SDP state unusable. Rebuild it while
       // retaining the live media tracks; chat history is intentionally discarded.
       this.disposePeer()

@@ -1,4 +1,5 @@
 import type { VoiceState } from './cloudflare/types'
+import { logClient } from './telemetry'
 
 type Publisher = { publishMicrophone(track: MediaStreamTrack): Promise<void>; unpublishMicrophone(): Promise<void> }
 export class MicrophoneService {
@@ -27,6 +28,7 @@ export class MicrophoneService {
       if (!track) { stream.getTracks().forEach((t) => t.stop()); throw new DOMException('No microphone', 'NotFoundError') }
       this.track = track
       track.onended = () => {
+        logClient('warn', 'microphone.disconnected')
         this.reset()
         void this.publisher.unpublishMicrophone()
         this.error('O microfone foi desconectado. Você ainda pode ouvir a sala e usar o chat.')
@@ -36,6 +38,7 @@ export class MicrophoneService {
       this.state = { ...this.state, joined: true, muted: false, microphoneAvailable: true }
     } catch (error) {
       if (epoch !== this.epoch) return
+      logClient('error', 'microphone.start.failed', { error })
       this.track?.stop(); this.track = null
       this.state = { ...this.state, joined: false, muted: true, microphoneAvailable: false }
       this.error(microphoneError(error))

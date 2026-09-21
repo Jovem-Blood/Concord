@@ -37,9 +37,9 @@ export function startAutoUpdates(options: UpdateOptions = {}): boolean {
   updater.autoDownload = true
   updater.autoInstallOnAppQuit = true
   updater.logger = console
-  updater.on('error', (error) => console.error('Automatic update failed:', error))
+  updater.on('error', (error) => console.error('[error] desktop.update.failed', error))
   void updater.checkForUpdatesAndNotify().catch((error: unknown) => {
-    console.error('Could not check for updates:', error)
+    console.error('[error] desktop.update.check_failed', error)
   })
   return true
 }

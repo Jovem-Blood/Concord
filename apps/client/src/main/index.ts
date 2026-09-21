@@ -61,6 +61,9 @@ function createMainWindow(): void {
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (!isTrustedRendererUrl(url)) event.preventDefault()
   })
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[error] desktop.renderer.gone', { reason: details.reason, exitCode: details.exitCode })
+  })
 
   mainWindow.once('ready-to-show', () => mainWindow?.show())
   mainWindow.on('closed', () => {
@@ -72,15 +75,17 @@ function createMainWindow(): void {
   })
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    void mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL)
+    void mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL).catch((error: unknown) => {
+      console.error('[error] desktop.window.load_failed', error)
+    })
   } else {
     void mainWindow.loadFile(
       path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
-    )
+    ).catch((error: unknown) => { console.error('[error] desktop.window.load_failed', error) })
   }
 }
 
-app.whenReady().then(() => {
+void app.whenReady().then(() => {
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
@@ -97,6 +102,17 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
   })
+}).catch((error: unknown) => {
+  console.error('[error] desktop.startup.failed', error)
+  app.exit(1)
+})
+
+process.on('uncaughtException', (error) => {
+  console.error('[error] desktop.uncaught', error)
+  app.exit(1)
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('[error] desktop.unhandled_rejection', reason)
 })
 
 app.on('window-all-closed', () => {

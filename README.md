@@ -140,6 +140,10 @@ Run exactly one `server` instance: room presence, tokens, and publications are k
 | `PUBLIC_SERVER_URL` | Public API URL embedded in the Compose web build |
 | `VITE_SERVER_URL` | API URL embedded in the client |
 | `VITE_WEB_APP_URL` | Base URL used by desktop invite links |
+| `LOG_LEVEL` | Server log threshold (`error`, `warn`, `info`, `debug`); defaults to `info` |
+| `VITE_LOG_LEVEL` | Client console threshold; defaults to `info` |
+
+Server logs are structured JSON. The client reports errors, warnings, connection loss and recovery to `/v1/client-events`; a bounded in-memory queue retries reports after connectivity returns. Reports contain an ephemeral client ID, platform, event, severity and limited error classification. They do not include room codes, names, tokens, SDP or chat content. Events queued when the app closes are lost.
 
 Concord uses Cloudflare STUN and does not configure a TURN relay. Networks that require relay connectivity are therefore unsupported. Web capture audio availability depends on the browser, operating system, and selected source; video continues with a warning when audio is unavailable.
 
