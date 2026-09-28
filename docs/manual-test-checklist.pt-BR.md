@@ -15,8 +15,23 @@ regras; estas verificações exercitam permissões, captura e conectividade reai
 - [ ] Compartilhe pelos dois clientes simultaneamente e coloque cada vídeo em foco.
 - [ ] Teste áudio do sistema quando a plataforma permitir; negue permissões e
       confira se o aplicativo orienta a recuperação sem iniciar uma captura indevida.
-- [ ] Envie mensagens nos dois sentidos. Reconecte e confirme que as mensagens
-      antigas são apagadas.
+- [ ] Envie mensagens nos dois sentidos. Reconecte ou entre com outro cliente
+      enquanto alguém permanece e confirme que o histórico volta sem duplicatas.
+      Faça todos saírem, reutilize o código e confirme que o histórico está vazio.
+- [ ] Interrompa um WebSocket enquanto alguém permanece. Confira o estado
+      reconectando, mídia preservada, Enviar desativado com spinner, rascunho
+      editável e recuperação silenciosa. O rascunho não deve ser enviado sozinho.
+- [ ] Derrube a última conexão e volte em até 30 segundos. A identidade deve
+      voltar, mas o histórico deve estar vazio. Texto com falha exige copiar para o rascunho.
+- [ ] Perca uma confirmação de mensagem. Confira texto pendente, enviado uma vez,
+      ou vermelho após 30 segundos; Reenviar não pode duplicar uma mensagem aceita.
+- [ ] Confira nomes combinados ao digitar, sem indicador próprio, e limpeza após
+      3 segundos parado, envio, rascunho vazio, fechamento do chat, página oculta e queda.
+- [ ] Exceda o prazo de reconexão ou reinicie a API. A mídia deve parar e exigir
+      entrada explícita. Recarregar não deve entrar automaticamente.
+- [ ] Confira renovação automática das credenciais em uma sala com mais de duas horas.
+- [ ] Repita os testes pelo Cloudflare Tunnel, somente com WebSocket. Um cliente
+      antigo deve receber uma resposta exigindo atualização.
 - [ ] Interrompa a rede brevemente e restabeleça a conexão. Confira a recuperação;
       depois saia da sala e confirme que microfone e capturas são encerrados.
 - [ ] Copie um convite nos clientes web e desktop e abra-o no outro dispositivo.

@@ -12,11 +12,14 @@
     "lint": "eslint . --max-warnings=0"
   },
   "dependencies": {
+    "@concord/protocol": "workspace:*",
     "@fastify/cors": "11.1.0",
     "@fastify/rate-limit": "10.3.0",
-    "fastify": "5.12.1"
+    "fastify": "5.12.1",
+    "socket.io": "4.8.3"
   },
   "devDependencies": {
+    "socket.io-client": "4.8.3",
     "@eslint/js": "9.34.0",
     "@types/node": "24.3.0",
     "eslint": "9.34.0",

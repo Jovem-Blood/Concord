@@ -22,5 +22,7 @@ export default defineConfig({
   build: {
     outDir: 'dist-web',
     emptyOutDir: true,
+    // Keep sounds as same-origin files; the CSP intentionally disallows data: media.
+    assetsInlineLimit: 0,
   },
 })

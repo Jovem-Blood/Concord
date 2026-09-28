@@ -5,6 +5,7 @@ RUN corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json .npmrc ./
 COPY apps/client/package.json apps/client/package.json
+COPY packages/protocol packages/protocol
 RUN pnpm install --frozen-lockfile --filter @concord/client...
 
 COPY apps/client apps/client

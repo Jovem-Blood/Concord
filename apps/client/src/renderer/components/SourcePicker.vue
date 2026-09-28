@@ -90,7 +90,6 @@ onBeforeUnmount(() => previousFocus?.focus({ preventScroll: true }))
               class="source-card"
               :class="{ selected: source.id === selectedId }"
               :aria-pressed="source.id === selectedId"
-              :title="source.name"
               @click="selectedId = source.id"
             >
               <span class="source-thumbnail"><img :src="source.thumbnail" alt="" /><span v-if="source.id === selectedId" class="selected-check" aria-hidden="true">Selecionada</span></span>

@@ -3,6 +3,7 @@ WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json .npmrc ./
 COPY apps/server/package.json apps/server/package.json
+COPY packages/protocol packages/protocol
 RUN pnpm install --frozen-lockfile --filter @concord/server...
 COPY apps/server apps/server
 RUN node node_modules/typescript/bin/tsc -p apps/server/tsconfig.json
@@ -14,7 +15,9 @@ RUN corepack enable
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=build /app/apps/server/package.json apps/server/package.json
 COPY --from=build /app/apps/server/dist apps/server/dist
+COPY --from=build /app/apps/server/node_modules apps/server/node_modules
 COPY --from=build /app/node_modules node_modules
+COPY --from=build /app/packages packages
 USER node
 EXPOSE 3001
 CMD ["node", "apps/server/dist/index.js"]

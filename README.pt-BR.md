@@ -24,9 +24,9 @@
 
 O Concord foi feito para pequenos grupos que precisam de uma sala rapidamente — não de mais uma conta, comunidade ou espaço permanente. O acesso acontece por código ou link de convite e reúne compartilhamento de tela, voz e chat efêmero em uma interface focada.
 
-- Sem contas, câmera, gravação, histórico de mensagens, anexos ou mensagens diretas.
+- Sem contas, câmera, gravação, histórico permanente de mensagens, anexos ou mensagens diretas.
 - Clientes web e desktop usam o mesmo renderer Vue e entram na mesma sala.
-- Mídia e DataChannels passam pela Cloudflare Realtime; a API do Concord não recebe o conteúdo do chat.
+- A mídia passa pela Cloudflare Realtime. Chat, presença e digitação usam uma conexão Socket.IO dedicada, somente por WebSocket, com a API do Concord.
 - O aplicativo desktop está disponível para Windows e Linux, com cliente web auto-hospedável.
 
 ## Recursos
@@ -37,7 +37,8 @@ O Concord foi feito para pequenos grupos que precisam de uma sala rapidamente �
 - Resoluções de captura selecionáveis em `720p30` (padrão) e `1080p30`, sempre a 30 FPS.
 - Áudio do sistema opcional, desligado por padrão.
 - Microfone em tempo real, mute, silenciar sala e indicador local de fala.
-- Chat de texto confiável e ordenado, sem persistência: até 2.000 caracteres por mensagem e 500 mensagens em memória.
+- Chat de texto ordenado: até 2.000 caracteres por mensagem e as últimas 500 mensagens disponíveis para quem entrar ou reconectar. O histórico é apagado quando a última conexão ativa cai ou a API reinicia; nada é gravado em disco.
+- Indicadores de digitação, mensagens pendentes/enviadas/com falha, reenvio sem duplicatas e rascunhos editáveis offline.
 - Recuperação automática da sessão SFU, republicação das fontes ativas e reassinatura dos streams remotos.
 - Até 16 participantes por sala.
 - ZIPs portáteis, instalador NSIS para Windows e AppImage para Linux.
@@ -62,14 +63,17 @@ flowchart LR
   API[API de tokens e presença do Concord]
   SFU[Cloudflare Realtime SFU]
 
-  Client -->|operações de sala e credenciais temporárias| API
+  Client <-->|WebSocket de presença, chat, digitação e renovação| API
+  Client -->|entrada e sinalização de mídia por HTTP| API
   API -->|orquestração de sessões e faixas| SFU
-  Client <-->|tela, voz e DataChannels| SFU
+  Client <-->|tela e voz| SFU
 ```
 
-A Cloudflare fornece sessões, faixas e DataChannels — não as salas do Concord. A API Fastify mantém a presença em memória, valida tokens opacos por participante e autoriza publicação e assinatura. Os clientes negociam WebRTC pela API, enquanto mídia e texto seguem pelo SFU.
+A Cloudflare fornece sessões de mídia e faixas — não as salas do Concord. Uma `RoomAuthority` no servidor controla participantes, credenciais e gerações da conversa. Uma `RoomSession` no cliente coordena a conexão Socket.IO por WebSocket e um serviço separado de mídia WebRTC. Presença, mensagens e digitação são entregues imediatamente; o polling da sala e o chat antigo por DataChannel foram desativados. HTTP continua responsável pela entrada, sinalização da mídia e aviso de saída ao fechar a página.
 
-As sessões duram até duas horas e expiram após dois minutos sem atividade. Execute uma única instância da API, a menos que seja adicionada coordenação compartilhada para o estado das salas.
+As credenciais são renovadas automaticamente antes de expirar em duas horas. Uma queda inesperada reserva a identidade e a vaga por 30 segundos após a detecção (até aproximadamente 15 segundos de heartbeat para detectar uma falha silenciosa). A mídia continua durante a recuperação e para se o prazo expirar. Recarregar/sair exige entrar novamente. A última conexão cair apaga o histórico imediatamente, mesmo durante a reserva de reconexão. Execute uma única instância da API; reiniciá-la apaga as salas e exige entrar novamente.
+
+Consulte [Ciclo de vida e implantação em tempo real](docs/realtime.md) para detalhes do protocolo, reenvio e Cloudflare Tunnel. O protocolo v2 exige atualizar servidor e clientes juntos.
 
 ## Início rápido
 

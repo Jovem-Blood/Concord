@@ -24,9 +24,9 @@
 
 Concord is designed for small groups that need a room quickly—not another account, community, or permanent workspace. A room is accessed through its code or invite link and combines screen sharing, voice, and ephemeral chat in the same focused interface.
 
-- No accounts, camera, recording, message history, attachments, or direct messages.
+- No accounts, camera, recording, permanent message history, attachments, or direct messages.
 - Web and desktop clients share the same Vue renderer and can join the same room.
-- Media and DataChannels travel through Cloudflare Realtime; the Concord API does not receive chat contents.
+- Media travels through Cloudflare Realtime. Chat, presence, and typing use a dedicated Socket.IO WebSocket connection to the Concord API.
 - The desktop app is available for Windows and Linux, with a self-hostable web client.
 
 ## Features
@@ -37,7 +37,8 @@ Concord is designed for small groups that need a room quickly—not another acco
 - Selectable `720p30` (default) and `1080p30` capture resolutions with a fixed 30 FPS rate.
 - Optional system audio, disabled by default.
 - Real-time microphone audio, mute controls, room audio controls, and local speaking feedback.
-- Reliable, ordered text chat with no persistence: up to 2,000 characters per message and 500 messages in memory.
+- Ordered text chat: up to 2,000 characters per message and the latest 500 messages available to new and returning participants. History is deleted when the last live socket disconnects or the API restarts; nothing is written to disk.
+- Typing indicators, pending/sent/failed message feedback, duplicate-safe retries, and editable offline drafts.
 - Automatic SFU session recovery, active-source republishing, and remote stream resubscription.
 - Up to 16 participants per room.
 - Portable ZIPs plus Windows NSIS and Linux AppImage releases.
@@ -62,14 +63,17 @@ flowchart LR
   API[Concord token and presence API]
   SFU[Cloudflare Realtime SFU]
 
-  Client -->|room operations and short-lived credentials| API
+  Client <-->|WebSocket presence, chat, typing, and renewal| API
+  Client -->|HTTP join and media signaling| API
   API -->|session and track orchestration| SFU
-  Client <-->|screen, voice, and DataChannels| SFU
+  Client <-->|screen and voice| SFU
 ```
 
-Cloudflare provides sessions, tracks, and DataChannels—not Concord rooms. The Fastify API keeps room presence in memory, validates opaque participant tokens, and authorizes publishing and subscriptions. Clients negotiate WebRTC through the API, while media and text flow through the SFU.
+Cloudflare provides media sessions and tracks—not Concord rooms. One server `RoomAuthority` owns membership, credentials, and conversation generations. One client `RoomSession` coordinates a WebSocket-only Socket.IO connection and a separate WebRTC media service. Presence, messages, and typing are pushed immediately; room polling and the old DataChannel chat transport have been retired. HTTP remains responsible for joining, media signaling, and best-effort unload delivery.
 
-Room sessions last up to two hours and expire after two minutes without activity. Run a single API instance unless you add shared coordination for room state.
+Participant credentials rotate automatically before their two-hour expiry. Unexpected connection loss reserves the participant's identity and room slot for 30 seconds after detection (heartbeats take approximately 15 seconds to detect a silent failure). Working media continues during recovery, then stops if recovery expires. Refresh/Leave requires an explicit rejoin. A disconnected last participant does **not** preserve history during the recovery window: their next connection starts a new conversation. Run a single API instance; an API restart clears rooms and requires rejoining.
+
+See [Realtime lifecycle and deployment](docs/realtime.md) for protocol, retry, Cloudflare Tunnel, and rollout details. Protocol v2 requires updating the server and all clients together.
 
 ## Quick start
 

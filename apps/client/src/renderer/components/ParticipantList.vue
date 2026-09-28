@@ -12,7 +12,7 @@ defineProps<{ participants: ParticipantView[]; voice: VoiceState; speaking: Reco
     >
       <img class="avatar" :src="avatarUrl(participant.name)" :alt="`Avatar de ${participant.name}`" />
       <span>
-        <strong :title="participant.name">{{ participant.name }}{{ participant.isLocal ? ' · Você' : '' }}</strong>
+        <strong>{{ participant.name }}{{ participant.isLocal ? ' · Você' : '' }}</strong>
         <small class="participant-status">{{ status !== 'Conectado' ? status :
           speaking[participant.isLocal ? 'local' : participant.identity] ? 'Falando' :
           participant.isLocal ? (voice.joined ? (voice.muted ? 'Microfone silenciado' : 'Na conversa') : 'Só ouvindo') :

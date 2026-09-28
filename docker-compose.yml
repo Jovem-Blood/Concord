@@ -6,11 +6,17 @@ services:
       context: .
       dockerfile: apps/server/Dockerfile
     restart: unless-stopped
+    # Avoid stale host resolvers after Wi-Fi/VPN changes; SFU signaling requires reliable public DNS.
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
     environment:
       NODE_ENV: production
       PORT: 3001
       CLOUDFLARE_SFU_APP_ID: ${CLOUDFLARE_SFU_APP_ID:?Set CLOUDFLARE_SFU_APP_ID in .env}
       CLOUDFLARE_SFU_APP_SECRET: ${CLOUDFLARE_SFU_APP_SECRET:?Set CLOUDFLARE_SFU_APP_SECRET in .env}
+      CLOUDFLARE_TURN_KEY_ID: ${CLOUDFLARE_TURN_KEY_ID:-}
+      CLOUDFLARE_TURN_API_TOKEN: ${CLOUDFLARE_TURN_API_TOKEN:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
     ports:
       - "127.0.0.1:3001:3001/tcp"

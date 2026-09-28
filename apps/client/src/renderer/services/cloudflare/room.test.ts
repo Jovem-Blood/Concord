@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CloudflareRoomService } from './room'
-import type { RoomSnapshot } from './types'
+import type { RoomPresence, RoomSnapshot } from './types'
+import { PresenceSoundNotifier } from '../sounds'
 
 class FakeTrack {
   readyState = 'live'
@@ -54,21 +55,13 @@ afterEach(async () => {
 function setup() {
   vi.useFakeTimers()
   vi.stubGlobal('RTCPeerConnection', FakePeer)
-  const presence = { participants: [{ identity: 'local', name: 'Local' }, { identity: 'remote', name: 'Remote' }], tracks: [] as { sessionId: string; trackName: string; kind: string; source: 'microphone' | 'screen-video' | 'screen-audio'; participantIdentity: string; participantName: string }[] }
-  let nextRoomStatus = 200
-  let roomFailures = 0
+  const presence: RoomPresence = { participants: [{ identity: 'local', name: 'Local', connection: 'connected', voice: { available: false } }, { identity: 'remote', name: 'Remote', connection: 'connected', voice: { available: false } }], tracks: [] }
   let nextSessionStatus = 200
   const calls: { path: string; body: Record<string, unknown> }[] = []
   const fetcher = vi.fn(async (url: string, options: RequestInit) => {
     const path = url.split('/v1/')[1]!
     const body = options.body ? JSON.parse(String(options.body)) : {}
     calls.push({ path, body })
-    if (path === 'room') {
-      const status = nextRoomStatus
-      if (roomFailures > 0) roomFailures--
-      if (roomFailures === 0) nextRoomStatus = 200
-      return new Response(JSON.stringify(presence), { status })
-    }
     if (path === 'session') {
       if (!options.body && new Headers(options.headers).get('content-type') === 'application/json') {
         return new Response('{"error":"FST_ERR_CTP_EMPTY_JSON_BODY"}', { status: 400 })
@@ -93,24 +86,55 @@ function setup() {
   const states: string[] = []
   service.onSnapshot((snapshot) => snapshots.push(snapshot))
   service.onConnection((state) => states.push(state))
-  const connect = () => service.connect({ participantToken: 'opaque-token', identity: 'local', expiresAt: Date.now() + 7200000 })
+  const update = async () => { service.updatePresence(structuredClone(presence)); await vi.advanceTimersByTimeAsync(0) }
+  const connect = async () => {
+    await service.connect({ participantToken: 'opaque-token', identity: 'local', expiresAt: Date.now() + 7200000 })
+    service.setSignalingAvailable(true)
+    await update()
+  }
   const stream = (audio = true) => {
     const tracks = [new FakeTrack('video', 'screen'), ...(audio ? [new FakeTrack('audio', 'system-audio')] : [])]
     return { tracks, media: { getTracks: () => tracks, getVideoTracks: () => tracks.filter((t) => t.kind === 'video'), getAudioTracks: () => tracks.filter((t) => t.kind === 'audio') } as unknown as MediaStream }
   }
   return {
-    service, presence, calls, states, snapshots, connect, stream,
-    failNextPoll: (status: number) => { nextRoomStatus = status },
-    failRoomPolls: (count: number, status = 500) => { roomFailures = count; nextRoomStatus = status },
+    service, presence, calls, states, snapshots, connect, stream, update,
     failNextSession: (status: number) => { nextSessionStatus = status },
   }
 }
 
 describe('Cloudflare WebRTC room lifecycle', () => {
+  it('stops local capture synchronously while the room controller owns departure', async () => {
+    const { connect, service, stream, calls } = setup()
+    await connect()
+    const capture = stream()
+    await service.publishScreen(capture.media, '720p')
+    const leaving = service.disconnect()
+    expect(capture.tracks.every((track) => track.readyState === 'ended')).toBe(true)
+    expect(calls.some((call) => call.path === 'leave')).toBe(false)
+    await leaving
+  })
+
+  it('does not play a leave sound when a remote screen ends', async () => {
+    const { connect, service, presence, snapshots, update } = setup()
+    const play = vi.fn()
+    const notifier = new PresenceSoundNotifier(play)
+    await connect()
+    notifier.update(snapshots[snapshots.length - 1]!.participants)
+    service.onSnapshot((snapshot) => notifier.update(snapshot.participants))
+    presence.tracks.push({ sessionId: 'remote-session', trackName: 'screen', kind: 'video', source: 'screen-video', participantIdentity: 'remote', participantName: 'Remote' })
+    await update()
+    presence.tracks.length = 0
+    await update()
+    expect(play).not.toHaveBeenCalled()
+    presence.participants.pop()
+    await update()
+    expect(play).toHaveBeenCalledExactlyOnceWith('leave')
+  })
+
   it('joins as a viewer without allocating media or asking for capture', async () => {
     const { connect, calls, snapshots } = setup()
     await connect()
-    expect(calls.map((c) => c.path)).toEqual(['room'])
+    expect(calls).toEqual([])
     expect(FakePeer.instances).toHaveLength(0)
     expect(snapshots[snapshots.length - 1]!.participants[0]!.isLocal).toBe(true)
   })
@@ -150,15 +174,15 @@ describe('Cloudflare WebRTC room lifecycle', () => {
   })
 
   it('receives first with an SFU offer, answers, groups audio/video and removes stopped shares', async () => {
-    const { connect, calls, presence, snapshots } = setup()
-    presence.tracks = [{ kind: 'video', source: 'screen-video' as const }, { kind: 'audio', source: 'screen-audio' as const }].map(({ kind, source }) => ({ sessionId: 'publisher-session', trackName: kind, kind, source, participantIdentity: 'remote', participantName: 'Remote' }))
+    const { connect, calls, presence, snapshots, update } = setup()
+    presence.tracks = [{ kind: 'video' as const, source: 'screen-video' as const }, { kind: 'audio' as const, source: 'screen-audio' as const }].map(({ kind, source }) => ({ sessionId: 'publisher-session', trackName: kind, kind, source, participantIdentity: 'remote', participantName: 'Remote' }))
     await connect()
     expect(calls.find((c) => c.path === 'tracks')!.body).not.toHaveProperty('sessionDescription')
     expect(calls.find((c) => c.path === 'renegotiate')!.body).toEqual({ sessionDescription: { type: 'answer', sdp: 'answer-sdp' } })
     expect(snapshots[snapshots.length - 1]!.shares).toHaveLength(1)
     expect(snapshots[snapshots.length - 1]!.shares[0]).toMatchObject({ participantName: 'Remote', videoTrack: { kind: 'video' }, audioTrack: { kind: 'audio' } })
     presence.tracks = []
-    await vi.advanceTimersByTimeAsync(3000)
+    await update()
     expect(calls[calls.length - 1]!.path).toBe('tracks/close')
     expect(snapshots[snapshots.length - 1]!.shares).toEqual([])
   })
@@ -198,20 +222,20 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     expect(states[states.length - 1]).toBe('connected')
   })
 
-  it('keeps capture and retries after a prolonged signaling outage', async () => {
-    const { connect, service, stream, states, failRoomPolls } = setup()
+  it('keeps working media and pauses recovery while room signaling is unavailable', async () => {
+    const { connect, service, stream, calls } = setup()
     await connect()
     const capture = stream(false)
     await service.publishScreen(capture.media, '720p')
-    failRoomPolls(8)
-
-    await vi.advanceTimersByTimeAsync(100_000)
-    expect(states[states.length - 1]).toBe('reconnecting')
+    service.setSignalingAvailable(false)
+    const count = calls.length
+    await vi.advanceTimersByTimeAsync(25_000)
+    expect(calls).toHaveLength(count)
     expect(capture.tracks[0]!.readyState).toBe('live')
     expect(FakePeer.instances).toHaveLength(1)
 
-    await vi.advanceTimersByTimeAsync(15_000)
-    expect(states[states.length - 1]).toBe('connected')
+    service.setSignalingAvailable(true)
+    await vi.advanceTimersByTimeAsync(0)
     expect(FakePeer.instances).toHaveLength(1)
   })
 
@@ -230,16 +254,18 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     expect(states[states.length - 1]).toBe('connected')
   })
 
-  it('stops capture and clears state when the API revokes the participant token', async () => {
-    const { connect, service, stream, failNextPoll, states, snapshots } = setup()
+  it('reports revoked media credentials to the room controller', async () => {
+    const { connect, service, stream, failNextSession, states } = setup()
     await connect()
     const capture = stream(false)
     await service.publishScreen(capture.media, '720p')
-    failNextPoll(401)
+    failNextSession(401)
+    FakePeer.instances[0]!.connectionState = 'failed'
+    FakePeer.instances[0]!.onconnectionstatechange?.()
     await vi.advanceTimersByTimeAsync(3000)
-    expect(capture.tracks[0]!.readyState).toBe('ended')
-    expect(snapshots[snapshots.length - 1]).toEqual({ participants: [], shares: [], remoteVoiceTracks: [] })
     expect(states[states.length - 1]).toBe('disconnected')
+    await service.disconnect()
+    expect(capture.tracks[0]!.readyState).toBe('ended')
   })
 
   it('does not continue polling after explicit disconnect', async () => {
@@ -249,6 +275,6 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     const count = calls.length
     await vi.advanceTimersByTimeAsync(60000)
     expect(calls).toHaveLength(count)
-    expect(calls[calls.length - 1]!.path).toBe('leave')
+    expect(calls.some((call) => call.path === 'room' || call.path === 'leave')).toBe(false)
   })
 })

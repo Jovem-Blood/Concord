@@ -18,10 +18,20 @@ describe('requestJoinToken', () => {
     })
   })
 
-  it('rejects expired room credentials', async () => {
+  it('does not reject server credentials using the unsynchronized client clock', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       identity: 'participant-id',
       expiresAt: 1,
+      participantToken: 'signed.jwt.value',
+    }), { status: 200 })))
+
+    await expect(requestJoinToken('ABCD2345', 'Thiago')).resolves.toMatchObject({ expiresAt: 1 })
+  })
+
+  it('rejects malformed room credentials', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      identity: 'participant-id',
+      expiresAt: 0,
       participantToken: 'signed.jwt.value',
     }), { status: 200 })))
 

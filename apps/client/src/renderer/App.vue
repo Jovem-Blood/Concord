@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { CaptureResolution, CaptureSourceDTO } from '../shared/capture'
 import type { AppError } from '../shared/errors'
@@ -7,7 +7,6 @@ import ConcordBrand from './components/ConcordBrand.vue'
 import CallControls from './components/CallControls.vue'
 import ChatPanel from './components/ChatPanel.vue'
 import MediaTile from './components/MediaTile.vue'
-import ParticipantList from './components/ParticipantList.vue'
 import RemoteVoiceAudio from './components/RemoteVoiceAudio.vue'
 import SiteFooter from './components/SiteFooter.vue'
 import SourcePicker from './components/SourcePicker.vue'
@@ -19,14 +18,14 @@ import { generateRoomCode, isValidRoomCode, normalizeRoomCode } from './domain/r
 import type { RoomState, ShareState } from './domain/state'
 import { captureProvider } from './services/capture/provider'
 import { writeClipboard } from './services/clipboard'
-import { CloudflareRoomService } from './services/cloudflare/room'
-import type { ChatSnapshot } from './services/chat'
+import { RoomSession } from './services/room-session'
+import { emptyChat, type ChatSnapshot } from './services/room-chat'
 import type { ParticipantView, RemoteShareView } from './services/cloudflare/types'
 import { PresenceSoundNotifier, soundPlayer } from './services/sounds'
-import { requestJoinToken } from './services/server'
+import { serverUrl } from './services/server'
 import { logClient } from './services/telemetry'
 
-const roomService = new CloudflareRoomService()
+const roomService = new RoomSession()
 const presenceSounds = new PresenceSoundNotifier()
 const voiceControls = useVoice(roomService)
 const route = useRoute()
@@ -44,12 +43,43 @@ const errorMessage = ref('')
 const shareNotice = ref('')
 const copied = ref(false)
 const focusedShareKey = ref('')
+const frozenFrames = ref<Record<string, string>>({})
 const chatOpen = ref(false)
-const chat = ref<ChatSnapshot>({ messages: [], unread: 0, open: false, ready: false })
+const chat = ref<ChatSnapshot>(emptyChat())
+const chatDraft = ref('')
 const chatError = ref('')
-const chatPanel = ref<{ clearDraft(): void } | null>(null)
+const stageCanvas = ref<HTMLElement | null>(null)
+const mediaGrid = ref<HTMLElement | null>(null)
+const gridSize = ref({ width: 1, height: 1 })
+let gridObserver: ResizeObserver | undefined
+const gridLayout = computed(() => {
+  const count = participants.value.length + shares.value.length + (localStream.value ? 1 : 0)
+  let columns = 1
+  let best = 0
+  for (let candidate = 1; candidate <= count; candidate++) {
+    const rows = Math.ceil(count / candidate)
+    const width = (gridSize.value.width - 12 * (candidate - 1)) / candidate
+    const height = (gridSize.value.height - 12 * (rows - 1)) / rows
+    const score = Math.min(width / 16, height / 9)
+    if (score > best) { best = score; columns = candidate }
+  }
+  return { '--tile-columns': columns, '--tile-rows': Math.max(1, Math.ceil(count / columns)) }
+})
+watch(mediaGrid, (element) => {
+  gridObserver?.disconnect()
+  if (!element) return
+  gridObserver = new ResizeObserver(([entry]) => {
+    if (entry) gridSize.value = { width: entry.contentRect.width, height: entry.contentRect.height }
+  })
+  gridObserver.observe(element)
+})
+const controlsVisible = ref(true)
+const fullscreen = ref(false)
+const pingMs = ref<number | null>(null)
 let cleanupPromise: Promise<void> | null = null
-let screenSoundOpen = false
+let captureGeneration = 0
+let controlsTimer: ReturnType<typeof setTimeout> | undefined
+let pingTimer: ReturnType<typeof setInterval> | undefined
 
 const captureEnvironment = captureProvider.capabilities.environment
 const configuredWebAppUrl = String(import.meta.env.VITE_WEB_APP_URL ?? '').trim()
@@ -57,15 +87,6 @@ const publicWebAppUrl = configuredWebAppUrl || (captureEnvironment === 'web' ? w
 const invitedRoomCode = computed(() => roomCodeFromRoute(route.params.roomCode))
 const canSubmit = computed(() => displayName.value.trim().length >= 1 && roomState.value !== 'joining')
 const avatarPreviewUrl = computed(() => avatarUrl(displayName.value))
-const statusLabel = computed(() => ({
-  connected: 'Conectado',
-  reconnecting: 'Reconectando…',
-  joining: 'Entrando…',
-  disconnected: 'Desconectado',
-  error: 'Erro de conexão',
-  idle: 'Inativo',
-}[roomState.value]))
-
 watch(
   () => route.params.roomCode,
   (roomCode) => {
@@ -81,26 +102,29 @@ roomService.onSnapshot((snapshot) => {
   participants.value = snapshot.participants
   shares.value = snapshot.shares
   voiceControls.remoteTracks.value = snapshot.remoteVoiceTracks
-  if (focusedShareKey.value && !snapshot.shares.some((share) => share.key === focusedShareKey.value)) {
+  if (focusedShareKey.value && focusedShareKey.value !== 'local' && !snapshot.shares.some((share) => share.key === focusedShareKey.value)) {
     focusedShareKey.value = ''
   }
 })
 roomService.onChat((snapshot) => {
-  const previousMessage = chat.value.messages[chat.value.messages.length - 1]
-  const nextMessage = snapshot.messages[snapshot.messages.length - 1]
-  const previousKey = previousMessage ? `${previousMessage.senderId}:${previousMessage.id}` : ''
-  const nextKey = nextMessage ? `${nextMessage.senderId}:${nextMessage.id}` : ''
-  const localIdentity = participants.value.find((participant) => participant.isLocal)?.identity
-  if (nextMessage && nextKey !== previousKey && nextMessage.senderId !== localIdentity) {
+  if (currentRoomCode.value && !snapshot.open && snapshot.notification > chat.value.notification) {
     soundPlayer.play('chat-notification')
   }
   chat.value = snapshot
 })
 
-roomService.onConnection((state) => {
+roomService.onConnection((state, message) => {
   roomState.value = state
-  if (state === 'disconnected' && currentRoomCode.value) {
-    errorMessage.value = 'A conexão com a sala foi encerrada.'
+  if (state === 'connected') {
+    void measurePing()
+    if (!pingTimer) pingTimer = setInterval(() => void measurePing(), 15_000)
+  } else if (state === 'disconnected') {
+    pingMs.value = null
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = undefined }
+  }
+  if (state === 'disconnected' && currentRoomCode.value && message) {
+    captureGeneration++
+    errorMessage.value = message
     void stopSharing()
     voiceControls.reset()
   }
@@ -121,9 +145,9 @@ async function joinRoom(roomCode: string): Promise<void> {
 
   roomState.value = 'joining'
   errorMessage.value = ''
+  presenceSounds.reset()
   try {
-    const credentials = await requestJoinToken(normalizedCode, name)
-    await roomService.connect(credentials)
+    await roomService.join(normalizedCode, name)
     localStorage.setItem('displayName', name)
     currentRoomCode.value = normalizedCode
     roomCodeInput.value = normalizedCode
@@ -146,12 +170,13 @@ function enterRoom(): void {
 }
 
 async function leaveRoom(): Promise<void> {
+  captureGeneration++
   soundPlayer.play('leave')
   presenceSounds.reset()
-  await stopSharing()
-  await roomService.disconnect()
+  await Promise.all([roomService.disconnect(), stopSharing()])
   voiceControls.reset()
   chatOpen.value = false
+  chatDraft.value = ''
   currentRoomCode.value = ''
   roomState.value = 'idle'
   participants.value = []
@@ -160,14 +185,68 @@ async function leaveRoom(): Promise<void> {
   shareNotice.value = ''
   await router.replace('/')
 }
-function toggleChat(): void {
+async function toggleChat(): Promise<void> {
+  if (!chatOpen.value && document.fullscreenElement) await toggleFullscreen()
   chatOpen.value = !chatOpen.value
   roomService.setChatOpen(chatOpen.value)
   if (chatOpen.value) chatError.value = ''
 }
+
+async function measurePing(): Promise<void> {
+  const startedAt = performance.now()
+  try {
+    const response = await fetch(`${serverUrl}/health`, { cache: 'no-store', signal: AbortSignal.timeout(5_000) })
+    if (!response.ok) throw new Error(`Health check failed (${response.status})`)
+    pingMs.value = Math.max(0, Math.round(performance.now() - startedAt))
+  } catch {
+    pingMs.value = null
+  }
+}
+
+function participantConnection(participant: ParticipantView): 'connected' | 'reconnecting' | 'disconnected' {
+  if (!participant.isLocal) return participant.connection ?? 'connected'
+  if (roomState.value === 'reconnecting' || roomState.value === 'joining') return 'reconnecting'
+  if (roomState.value === 'disconnected' || roomState.value === 'error') return 'disconnected'
+  return 'connected'
+}
+
+function connectionLabel(state: 'connected' | 'reconnecting' | 'disconnected'): string {
+  return state === 'connected' ? 'Conectado' : state === 'reconnecting' ? 'Reconectando' : 'Desconectado'
+}
+
+function focusShare(key: string): void {
+  const previousKey = focusedShareKey.value
+  if (previousKey === key) return
+  const nextKey = key
+  if (previousKey && previousKey !== nextKey && previousKey !== 'local') void roomService.pauseShare(previousKey)
+  focusedShareKey.value = nextKey
+  if (nextKey && nextKey !== 'local') void roomService.resumeShare(nextKey)
+}
+
+function freezeShare(shareKey: string, dataUrl: string): void {
+  if (!frozenFrames.value[shareKey]) frozenFrames.value = { ...frozenFrames.value, [shareKey]: dataUrl }
+  if (focusedShareKey.value !== shareKey) void roomService.pauseShare(shareKey)
+}
+
+function wakeControls(): void {
+  controlsVisible.value = true
+  if (controlsTimer) clearTimeout(controlsTimer)
+  controlsTimer = setTimeout(() => { controlsVisible.value = false }, 3_000)
+}
+
+async function toggleFullscreen(): Promise<void> {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen()
+    else await stageCanvas.value?.requestFullscreen()
+  } catch (error) {
+    logClient('warn', 'fullscreen.toggle.failed', { error })
+  }
+}
+
+function onFullscreenChange(): void { fullscreen.value = Boolean(document.fullscreenElement) }
 function sendChat(content: string): void {
   chatError.value = ''
-  if (roomService.sendChat(content)) chatPanel.value?.clearDraft()
+  if (roomService.sendChat(content)) { if (chatDraft.value === content) chatDraft.value = '' }
   else chatError.value = 'A mensagem não foi enviada. Aguarde a conexão do chat e tente novamente.'
 }
 
@@ -182,7 +261,8 @@ async function copyLink(): Promise<void> {
   }
 }
 
-function openPicker(): void {
+async function openPicker(): Promise<void> {
+  if (document.fullscreenElement) await toggleFullscreen()
   errorMessage.value = ''
   shareState.value = 'selecting'
 }
@@ -200,9 +280,11 @@ async function startSharing(
   shareState.value = 'starting'
   errorMessage.value = ''
   shareNotice.value = ''
+  const generation = captureGeneration
 
   try {
     const stream = await captureProvider.capture({ source, includeSystemAudio, resolution })
+    if (generation !== captureGeneration || roomState.value !== 'connected') { stopMediaStream(stream); return }
 
     localStream.value = stream
     const videoTrack = stream.getVideoTracks()[0]
@@ -219,10 +301,11 @@ async function startSharing(
 
     if (localPreview.value) localPreview.value.srcObject = stream
     await roomService.publishScreen(stream, resolution)
+    if (generation !== captureGeneration) { stopMediaStream(stream); return }
     shareState.value = 'sharing'
-    screenSoundOpen = true
     soundPlayer.play('screen-open')
   } catch (error) {
+    if (generation !== captureGeneration) return
     logClient('error', 'screen.start.failed', { error })
     await captureProvider.cancel()
     await stopSharing()
@@ -242,10 +325,10 @@ function stopSharing(): Promise<void> {
   if (cleanupPromise) return cleanupPromise
   if (!localStream.value && shareState.value === 'idle') return Promise.resolve()
 
+  const wasSharing = shareState.value === 'sharing'
   cleanupPromise = (async () => {
-    const notifyClose = screenSoundOpen
-    screenSoundOpen = false
     shareState.value = 'stopping'
+    if (focusedShareKey.value === 'local') focusedShareKey.value = ''
     const stream = localStream.value
     localStream.value = null
 
@@ -253,7 +336,7 @@ function stopSharing(): Promise<void> {
     if (localPreview.value) localPreview.value.srcObject = null
     await roomService.unpublishScreen()
     shareState.value = 'idle'
-    if (notifyClose) soundPlayer.play('screen-close')
+    if (wasSharing) soundPlayer.play('screen-close')
   })().finally(() => {
     cleanupPromise = null
   })
@@ -266,11 +349,37 @@ function getErrorMessage(error: unknown): string {
   return 'Algo deu errado. Tente novamente.'
 }
 
+function onPageHide(): void {
+  captureGeneration++
+  presenceSounds.reset()
+  if (pingTimer) { clearInterval(pingTimer); pingTimer = undefined }
+  pingMs.value = null
+  void roomService.disconnect(true)
+  stopMediaStream(localStream.value)
+  localStream.value = null
+  focusedShareKey.value = ''
+  currentRoomCode.value = ''
+  roomState.value = 'idle'
+  shareState.value = 'idle'
+  voiceControls.reset()
+}
+
 onBeforeUnmount(() => {
+  gridObserver?.disconnect()
+  window.removeEventListener('pagehide', onPageHide)
+  if (controlsTimer) clearTimeout(controlsTimer)
+  if (pingTimer) clearInterval(pingTimer)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
   presenceSounds.reset()
   void stopSharing()
   void roomService.disconnect()
   voiceControls.reset()
+})
+
+onMounted(() => {
+  window.addEventListener('pagehide', onPageHide)
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+  wakeControls()
 })
 </script>
 
@@ -347,45 +456,60 @@ onBeforeUnmount(() => {
           <strong>{{ currentRoomCode }}</strong><small aria-live="polite">{{ copied ? 'Copiado' : 'Copiar link' }}</small>
         </button>
       </div>
-      <div class="connection-state" :data-state="roomState" role="status"><span aria-hidden="true" />{{ statusLabel }}</div>
     </header>
 
     <div class="workspace" :class="{ 'chat-open': chatOpen }">
-      <aside class="sidebar">
-        <div class="sidebar-room">
-          <span class="sidebar-kicker">Nesta sala</span>
-          <strong>{{ currentRoomCode }}</strong>
-          <small>Compartilhamento protegido pelo link</small>
-        </div>
-        <ParticipantList :participants="participants" :voice="voiceControls.voice.value" :speaking="voiceControls.speaking.value" :status="statusLabel" />
-      </aside>
-
       <section class="stage">
         <header class="stage-header">
           <div>
-            <p class="eyebrow">Transmissões</p>
+            <p class="eyebrow">Sala ao vivo</p>
             <h1>Palco da sala</h1>
           </div>
-          <span class="stage-count">{{ shares.length + (localStream ? 1 : 0) }} {{ shares.length + (localStream ? 1 : 0) === 1 ? 'tela' : 'telas' }}</span>
         </header>
 
-        <div class="stage-canvas">
-          <div v-if="errorMessage || shareNotice" class="stage-banners">
+        <div
+          ref="stageCanvas"
+          class="stage-canvas"
+          :class="{ 'is-fullscreen': fullscreen }"
+          @pointermove="wakeControls"
+          @pointerdown="wakeControls"
+          @touchstart="wakeControls"
+          @keydown="wakeControls"
+        >
+          <div v-if="errorMessage || shareNotice || roomState !== 'connected'" class="stage-banners">
+            <button v-if="roomState === 'disconnected' || roomState === 'error'" class="button secondary" @click="joinRoom(currentRoomCode)">Entrar novamente</button>
+            <div v-if="roomState === 'reconnecting'" class="notice-banner" role="status">Reconectando à sala… Sua voz e tela continuam enquanto a conexão é recuperada.</div>
             <div v-if="errorMessage" class="error-banner stage-error" role="alert"><span>{{ errorMessage }}</span><button aria-label="Fechar erro" @click="errorMessage = ''">×</button></div>
             <div v-if="shareNotice" class="notice-banner stage-notice" role="status"><span>{{ shareNotice }}</span><button aria-label="Fechar aviso" @click="shareNotice = ''">×</button></div>
             <div v-if="voiceControls.notice.value" class="notice-banner stage-notice" role="status"><span>{{ voiceControls.notice.value }}</span><button aria-label="Fechar aviso" @click="voiceControls.notice.value = ''">×</button></div>
           </div>
           <RemoteVoiceAudio :voices="voiceControls.remoteTracks.value" :deafened="voiceControls.voice.value.deafened" @click="voiceControls.resumeAudio" />
 
-          <div v-if="shares.length === 0 && !localStream" class="empty-stage">
+          <div v-if="participants.length === 0 && shares.length === 0 && !localStream" class="empty-stage">
             <p class="eyebrow">Nenhuma transmissão</p>
             <h2>O palco está livre</h2>
             <p>Compartilhe uma janela ou monitor quando estiver pronto.</p>
-            <button class="button primary" :disabled="shareState !== 'idle'" @click="openPicker">Compartilhar minha tela</button>
+            <button class="button primary" :disabled="roomState !== 'connected' || shareState !== 'idle'" @click="openPicker">Compartilhar minha tela</button>
           </div>
 
-          <div v-else class="media-grid" :class="{ 'has-focus': focusedShareKey, 'single-share': shares.length + (localStream ? 1 : 0) === 1 }">
-            <article v-if="localStream" class="media-tile local" :class="{ hidden: focusedShareKey }">
+          <div v-else ref="mediaGrid" class="media-grid" :style="gridLayout" :class="{ 'has-focus': focusedShareKey }">
+            <article
+              v-for="participant in participants"
+              :key="participant.identity"
+              class="participant-tile"
+              :class="{ speaking: voiceControls.speaking.value[participant.isLocal ? 'local' : participant.identity], hidden: focusedShareKey }"
+            >
+              <img class="participant-avatar" :src="avatarUrl(participant.name)" :alt="`Avatar de ${participant.name}`" />
+              <strong>{{ participant.name }}{{ participant.isLocal ? ' · Você' : '' }}</strong>
+              <span class="participant-mic" :class="{ muted: participant.isLocal ? voiceControls.voice.value.muted : participant.voice.muted === true }" :data-tooltip="participant.isLocal ? (voiceControls.voice.value.muted ? 'Microfone silenciado' : 'Microfone ativo') : (participant.voice.muted === true ? 'Microfone silenciado' : 'Microfone ativo')" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" /><path v-if="participant.isLocal ? voiceControls.voice.value.muted : participant.voice.muted" d="m3 3 18 18" /></svg>
+              </span>
+              <span v-if="!participant.isLocal" class="participant-connection" :class="participantConnection(participant)" :data-tooltip="`${connectionLabel(participantConnection(participant))}${pingMs === null ? '' : ` · Ping da sala: ${pingMs} ms`}`" :aria-label="`${connectionLabel(participantConnection(participant))}${pingMs === null ? '' : `, ping da sala ${pingMs} milissegundos`}`">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.5a14 14 0 0 1 18 0M6.5 9.5a9 9 0 0 1 11 0M10 13.5a4 4 0 0 1 4 0M12 18h.01" /></svg>
+              </span>
+              <small>{{ participantConnection(participant) === 'reconnecting' ? 'Reconectando…' : voiceControls.speaking.value[participant.isLocal ? 'local' : participant.identity] ? 'Falando' : 'Na conversa' }}</small>
+            </article>
+            <article v-if="localStream" class="media-tile local" :class="{ hidden: focusedShareKey && focusedShareKey !== 'local', focused: focusedShareKey === 'local' }" role="button" tabindex="0" aria-label="Focar sua tela" @click="focusShare('local')" @keydown.enter.prevent="focusShare('local')" @keydown.space.prevent="focusShare('local')">
               <video ref="localPreview" autoplay playsinline muted :srcObject="localStream" aria-label="Prévia da sua tela" />
               <footer><span class="live-label"><span class="live-dot" aria-hidden="true" />{{ shareState === 'sharing' ? 'Ao vivo' : 'Iniciando…' }}</span><strong>Sua tela</strong><span class="audio-badge">Prévia local · {{ localStream.getAudioTracks().length ? 'Com áudio' : 'Sem áudio' }}</span></footer>
             </article>
@@ -395,20 +519,27 @@ onBeforeUnmount(() => {
               :share="share"
               :deafened="voiceControls.voice.value.deafened"
               :focused="focusedShareKey === share.key"
+              :placeholder="frozenFrames[share.key]"
               :class="{ hidden: focusedShareKey && focusedShareKey !== share.key }"
-              @focus="focusedShareKey = focusedShareKey === share.key ? '' : share.key"
+              @focus="focusShare(share.key)"
+              @frame="freezeShare(share.key, $event)"
+            />
+          </div>
+          <button class="toolbar-icon fullscreen-control" :class="{ hidden: !controlsVisible }" :data-tooltip="fullscreen ? 'Sair do fullscreen' : 'Abrir em fullscreen'" :aria-label="fullscreen ? 'Sair do fullscreen' : 'Abrir em fullscreen'" @click.stop="toggleFullscreen">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5" /></svg>
+          </button>
+          <div class="controls-dock" :class="{ hidden: !controlsVisible }" @pointermove.stop="wakeControls" @touchstart.stop="wakeControls" @focusin="wakeControls">
+            <CallControls
+              :focused="Boolean(focusedShareKey)"
+              :voice="voiceControls.voice.value" :voice-busy="voiceControls.busy.value" :share-state="shareState"
+              :connected="roomState === 'connected'" :chat-open="chatOpen" :unread="chat.unread"
+              @microphone="voiceControls.toggleMicrophone" @deafen="voiceControls.toggleDeafen" @share="openPicker"
+              @stop-share="stopSharing" @chat="toggleChat" @leave="leaveRoom" @grid="focusShare('')"
             />
           </div>
         </div>
-
-        <CallControls
-          :voice="voiceControls.voice.value" :voice-busy="voiceControls.busy.value" :share-state="shareState"
-          :connected="roomState === 'connected'" :chat-open="chatOpen" :unread="chat.unread"
-          @microphone="voiceControls.toggleMicrophone" @deafen="voiceControls.toggleDeafen" @share="openPicker"
-          @stop-share="stopSharing" @chat="toggleChat" @leave="leaveRoom"
-        />
       </section>
-      <ChatPanel v-if="chatOpen" ref="chatPanel" :chat="chat" :error="chatError" @close="toggleChat" @send="sendChat" />
+      <ChatPanel v-if="chatOpen" v-model:draft="chatDraft" :chat="chat" :error="chatError" :reconnecting="roomState === 'reconnecting' || roomState === 'joining'" @close="toggleChat" @send="sendChat" @typing="roomService.setTyping($event)" @retry="roomService.retryChat($event)" @dismiss-draft="roomService.dismissDraft($event)" />
     </div>
   </div>
 

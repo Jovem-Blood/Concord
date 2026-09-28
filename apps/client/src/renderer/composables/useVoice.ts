@@ -1,11 +1,11 @@
 import { onBeforeUnmount, ref, shallowRef, watch } from 'vue'
-import type { CloudflareRoomService } from '../services/cloudflare/room'
+import type { RoomSession } from '../services/room-session'
 import type { RemoteVoiceTrack, VoiceState } from '../services/cloudflare/types'
 import { MicrophoneService } from '../services/microphone'
 import { soundPlayer } from '../services/sounds'
 import { SpeakingMonitor } from '../services/speaking'
 
-export function useVoice(room: CloudflareRoomService) {
+export function useVoice(room: RoomSession) {
   const voice = ref<VoiceState>({ joined: false, muted: true, deafened: false, microphoneAvailable: false })
   const busy = ref(false)
   const notice = ref('')

@@ -2,8 +2,6 @@ import { AppError } from '../../../shared/errors'
 import type { CaptureResolution } from '../../../shared/capture'
 import { serverUrl, type JoinResponse } from '../server'
 import type { MediaSource, PublishedTrack, RemoteShareView, RemoteVoiceTrack, RoomPresence, RoomSnapshot, SfuResponse } from './types'
-import { EphemeralChat, validChatContent, type ChatSnapshot } from '../chat'
-import { ChatTransport } from './chat-transport'
 import { logClient } from '../telemetry'
 
 type ConnectionState = 'connected' | 'reconnecting' | 'disconnected'
@@ -30,17 +28,16 @@ export class CloudflareRoomService {
   private localTransceivers = new Map<MediaSource, RTCRtpTransceiver>()
   private localStream: MediaStream | null = null
   private microphone: MediaStreamTrack | null = null
-  private chatTransport: ChatTransport | null = null
-  private chatListener: ((snapshot: ChatSnapshot) => void) | null = null
-  private chat = new EphemeralChat((snapshot) => this.chatListener?.(snapshot))
-  private localName = ''
-  private chatSuspended = false
-  private chatRequested = false
+  private signalingAvailable = false
+  private syncQueued = false
+  private presenceRevision = 0
   private resolution: CaptureResolution = '720p'
   private needsReset = false
   private disconnectedAt = 0
   private failures = 0
   private connectionState: ConnectionState | null = null
+  private pausedShares = new Set<string>()
+  private iceServers: RTCIceServer[] = ICE_SERVERS
 
   private connection(state: ConnectionState, error?: unknown): void {
     if (this.connectionState !== state) {
@@ -53,41 +50,49 @@ export class CloudflareRoomService {
 
   onSnapshot(listener: (snapshot: RoomSnapshot) => void): void { this.snapshotListener = listener }
   onConnection(listener: (state: ConnectionState) => void): void { this.connectionListener = listener }
-  onChat(listener: (snapshot: ChatSnapshot) => void): void { this.chatListener = listener }
-  setChatOpen(open: boolean): void {
-    this.chat.setOpen(open)
-    if (open) {
-      this.chatRequested = true
-      void this.enqueue(() => this.ensureChat()).catch((error: unknown) => {
-        logClient('warn', 'chat.setup.failed', { error })
-        this.chat.setReady(false)
-      })
-    }
+  updateCredentials(credentials: JoinResponse): void { this.credentials = credentials }
+  setSignalingAvailable(available: boolean): void {
+    this.signalingAvailable = available
+    if (!available) clearTimeout(this.timer)
+    else this.reconcile()
   }
-  sendChat(content: string): boolean {
-    if (!this.credentials || this.chatSuspended || !validChatContent(content) || !this.chat.allow(this.credentials.identity)) return false
-    const payload = { id: crypto.randomUUID(), type: 'text' as const, content, sentAt: Date.now() }
-    if (!this.chatTransport?.send(JSON.stringify(payload))) return false
-    this.chat.append(payload, this.credentials.identity, this.localName, false)
-    return true
+  updatePresence(presence: RoomPresence): void {
+    this.presenceRevision++
+    this.presence = presence
+    this.emitSnapshot()
+    this.reconcile()
+  }
+  private reconcile(): void {
+    if (!this.credentials || !this.signalingAvailable || this.syncQueued) return
+    this.syncQueued = true
+    const revision = this.presenceRevision
+    const generation = this.generation
+    void this.enqueue(() => this.synchronize()).catch((error: unknown) => {
+      if (generation !== this.generation) return
+      if (error instanceof SignalingError && error.status === 401) this.connection('disconnected', error)
+      else this.signalReconnecting(false, error)
+    }).finally(() => {
+      if (generation !== this.generation) return
+      this.syncQueued = false
+      if (revision !== this.presenceRevision) this.reconcile()
+      else if (this.needsReset || this.disconnectedAt) this.schedule()
+    })
+  }
+  pauseShare(shareKey: string): Promise<void> {
+    this.pausedShares.add(shareKey)
+    return this.closeShareSubscriptions(shareKey)
   }
 
+  resumeShare(shareKey: string): Promise<void> {
+    this.pausedShares.delete(shareKey)
+    return this.enqueue(() => this.synchronize())
+  }
   async connect(credentials: JoinResponse): Promise<void> {
     await this.disconnect()
     this.credentials = credentials
     this.controller = new AbortController()
     this.failures = 0
-    const generation = this.generation
-    try {
-      await this.enqueue(() => this.synchronize())
-      if (generation !== this.generation) return
-      this.connection('connected')
-      this.schedule()
-    } catch (error) {
-      logClient('error', 'room.connect.failed', { error, code: 'ROOM_CONNECT_FAILED' })
-      await this.disconnect()
-      throw new AppError('ROOM_CONNECT_FAILED', 'Não foi possível conectar à sala.', { cause: error })
-    }
+    this.syncQueued = false
   }
 
   async publishScreen(stream: MediaStream, resolution: CaptureResolution): Promise<void> {
@@ -155,8 +160,8 @@ export class CloudflareRoomService {
   }
 
   async disconnect(): Promise<void> {
-    const credentials = this.credentials
     this.credentials = null
+    this.signalingAvailable = false
     this.generation++
     this.controller.abort()
     clearTimeout(this.timer)
@@ -166,17 +171,12 @@ export class CloudflareRoomService {
     this.microphone = null
     this.disposePeer()
     this.presence = { participants: [], tracks: [] }
-    this.chatRequested = false
+    this.pausedShares.clear()
+    this.iceServers = ICE_SERVERS
     this.emitSnapshot()
     await this.queue.catch((error: unknown) => {
       if (!(error instanceof DOMException && error.name === 'AbortError')) logClient('debug', 'room.queue.cancelled', { error })
     })
-    if (credentials) {
-      await fetch(`${serverUrl}/v1/leave`, {
-        method: 'POST', headers: { authorization: `Bearer ${credentials.participantToken}` },
-        keepalive: true, signal: AbortSignal.timeout(5_000),
-      }).catch((error: unknown) => logClient('warn', 'room.leave.failed', { error }))
-    }
   }
 
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
@@ -194,7 +194,7 @@ export class CloudflareRoomService {
     const generation = this.generation
     if (!credentials) throw new SignalingError(401)
     const response = await fetch(`${serverUrl}/v1/${path}`, {
-      method: path === 'room' ? 'GET' : 'POST',
+      method: path === 'ice-servers' ? 'GET' : 'POST',
       headers: {
         authorization: `Bearer ${credentials.participantToken}`,
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
@@ -211,7 +211,9 @@ export class CloudflareRoomService {
   private async ensurePeer(): Promise<RTCPeerConnection> {
     if (this.pc) return this.pc
     await this.api('session')
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, bundlePolicy: 'max-bundle' })
+    const ice = await this.api<{ iceServers?: RTCIceServer[] }>('ice-servers')
+    if (ice.iceServers?.length) this.iceServers = ice.iceServers
+    const pc = new RTCPeerConnection({ iceServers: this.iceServers, bundlePolicy: 'max-bundle' })
     this.pc = pc
     this.needsReset = false
     pc.ontrack = (event) => {
@@ -316,8 +318,7 @@ export class CloudflareRoomService {
   }
 
   private async synchronize(): Promise<void> {
-    this.presence = await this.api<RoomPresence>('room')
-    this.localName = this.presence.participants.find((p) => p.identity === this.credentials?.identity)?.name ?? ''
+    if (!this.signalingAvailable || !this.credentials) return
     this.emitSnapshot()
     if (this.disconnectedAt && Date.now() - this.disconnectedAt > 8_000) this.needsReset = true
     if (this.needsReset) {
@@ -326,7 +327,8 @@ export class CloudflareRoomService {
       await this.ensurePeer()
       await this.publish()
     }
-    const wanted = this.presence.tracks.filter((t) => t.participantIdentity !== this.credentials!.identity)
+    const wanted = this.presence.tracks.filter((t) => t.participantIdentity !== this.credentials!.identity &&
+      (t.source === 'microphone' || !this.pausedShares.has(`${t.participantIdentity}:${t.sessionId}`)))
     const keys = new Set(wanted.map(trackKey))
     const removed = [...this.subscriptions.entries()].filter(([key]) => !keys.has(key))
     if (removed.length) {
@@ -340,7 +342,6 @@ export class CloudflareRoomService {
       }
       this.emitSnapshot()
     }
-    if (this.chatRequested) await this.ensureChat()
     const added = wanted.filter((t) => !this.subscriptions.has(trackKey(t)))
     for (let offset = 0; offset < added.length; offset += 32) {
       const batch = added.slice(offset, offset + 32)
@@ -367,7 +368,28 @@ export class CloudflareRoomService {
     }
   }
 
+  private closeShareSubscriptions(shareKey: string): Promise<void> {
+    if (!this.signalingAvailable) return Promise.resolve()
+    return this.enqueue(async () => {
+      const removed = [...this.subscriptions.entries()].filter(([, subscription]) =>
+        subscription.source.source !== 'microphone' &&
+        `${subscription.source.participantIdentity}:${subscription.source.sessionId}` === shareKey)
+      if (!removed.length || !this.credentials) return
+      const result = await this.api<SfuResponse>('tracks/close', { mids: removed.map(([, subscription]) => subscription.mid) })
+      if (result.tracks?.some((track) => track.errorCode)) throw new Error('Could not close share subscriptions')
+      for (const [key, subscription] of removed) {
+        const transceiver = this.pc?.getTransceivers().find((item) => item.mid === subscription.mid)
+        transceiver?.receiver.track.stop()
+        transceiver?.stop()
+        this.subscriptions.delete(key)
+      }
+      this.emitSnapshot()
+    })
+  }
+
   private schedule(): void {
+    clearTimeout(this.timer)
+    if (!this.signalingAvailable || !this.credentials) return
     const generation = this.generation
     this.timer = setTimeout(() => {
       void this.enqueue(() => this.synchronize()).then(() => {
@@ -380,15 +402,15 @@ export class CloudflareRoomService {
         this.failures++
         if (error instanceof SignalingError && error.status === 401) {
           logClient('error', 'room.session.expired', { error, attempt: this.failures })
-          void this.disconnect().then(() => this.connection('disconnected', error))
+          this.connection('disconnected', error)
           return
         }
         // Signaling and media use separate paths. A temporary API outage must not tear
         // down a healthy WebRTC connection (or stop capture); keep retrying in place.
-        logClient(this.failures === 1 ? 'warn' : 'debug', 'room.poll.failed', { error, attempt: this.failures })
+        logClient(this.failures === 1 ? 'warn' : 'debug', 'media.recovery.failed', { error, attempt: this.failures })
         this.signalReconnecting(false, error)
       }).finally(() => {
-        if (generation === this.generation && this.credentials) this.schedule()
+        if (generation === this.generation && this.credentials && (this.needsReset || this.disconnectedAt || this.failures)) this.schedule()
       })
     }, Math.min(3_000 * 2 ** this.failures, 15_000))
   }
@@ -416,10 +438,6 @@ export class CloudflareRoomService {
   }
 
   private disposePeer(): void {
-    this.chatTransport?.dispose()
-    this.chatTransport = null
-    this.chat.reset()
-    this.chatSuspended = false
     const pc = this.pc
     this.pc = null
     if (pc) {
@@ -434,37 +452,22 @@ export class CloudflareRoomService {
   }
 
   private signalReconnecting(resetPeer = true, error?: unknown): void {
-    if (!this.chatSuspended) this.chat.reset()
-    this.chatSuspended = true
     if (resetPeer) this.needsReset = true
     this.connection('reconnecting', error)
-  }
-  private async ensureChat(): Promise<void> {
-    try {
-      if (!this.chatTransport) {
-        const pc = await this.ensurePeer()
-        const transport = new ChatTransport(pc, (path, body) => this.api(path, body),
-          (data, source) => { if (!this.chatSuspended) this.chat.receive(data, source) },
-          (ready) => this.chat.setReady(ready && !this.chatSuspended))
-        this.chatTransport = transport
-        await transport.establish()
-        await this.waitConnected(pc)
-      }
-      await this.chatTransport.synchronize((this.presence.channels ?? []).filter((c) => c.participantIdentity !== this.credentials?.identity))
-      this.chatSuspended = false
-      this.chat.setReady(this.chatTransport.isReady())
-    } catch (error) {
-      logClient('warn', 'chat.transport.failed', { error })
-      // A failed SCTP offer may leave the shared SDP state unusable. Rebuild it while
-      // retaining the live media tracks; chat history is intentionally discarded.
-      this.disposePeer()
-      this.signalReconnecting()
-    }
+    this.schedule()
   }
 
   private emitSnapshot(): void {
     const shares = new Map<string, RemoteShareView>()
     const remoteVoiceTracks: RemoteVoiceTrack[] = []
+    for (const source of this.presence.tracks) {
+      if (source.participantIdentity === this.credentials?.identity || source.source === 'microphone') continue
+      const key = `${source.participantIdentity}:${source.sessionId}`
+      if (!shares.has(key)) shares.set(key, {
+        key, participantIdentity: source.participantIdentity, participantName: source.participantName,
+        streamName: source.sessionId,
+      })
+    }
     for (const { source, mid } of this.subscriptions.values()) {
       const track = this.pc?.getTransceivers().find((t) => t.mid === mid)?.receiver.track
       if (!track || track.readyState === 'ended') continue

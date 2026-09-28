@@ -14,8 +14,23 @@ permissions, capture, and connectivity.
 - [ ] Share from both clients simultaneously and focus each stream.
 - [ ] Test system audio when the platform supports it; deny permissions and confirm
       the app explains how to recover without starting an unintended capture.
-- [ ] Send chat messages in both directions. Reconnect and confirm old messages
-      are cleared.
+- [ ] Send chat messages in both directions. Reconnect or join with a new client
+      while someone remains and confirm history is restored without duplicate messages.
+      Have everyone leave, reuse the room code, and confirm history is empty.
+- [ ] Drop one client's WebSocket while another remains. Confirm a reconnecting
+      tile, preserved voice/screen media, disabled Send with a spinner, editable
+      draft, and silent catch-up. Confirm the draft is not sent automatically.
+- [ ] Drop the last socket and reconnect within 30 seconds. Confirm the identity
+      recovers but the old history is cleared. Failed text must require Copy to draft.
+- [ ] Lose a message acknowledgement. Confirm pending text becomes sent once,
+      or becomes red after 30 seconds; Resend must not duplicate an accepted message.
+- [ ] Verify combined typing names, no self indicator, and clearing after 3 seconds
+      idle, Send, empty draft, chat close, page hiding, and disconnect.
+- [ ] Exceed the reconnect deadline or restart the API. Confirm media stops and
+      an explicit rejoin is required. Refresh must not automatically join.
+- [ ] Verify automatic credential renewal in a room lasting over two hours.
+- [ ] Repeat idle/reconnect checks through Cloudflare Tunnel and confirm WebSocket
+      transport only. An old client must receive an update-required response.
 - [ ] Disconnect the network briefly and restore it. Check recovery, then leave
       the room and confirm all microphone and capture resources stop.
 - [ ] Copy an invite in the web and desktop clients and open it on the other device.
