@@ -177,7 +177,9 @@ em pushes para `main` e pull requests. O deploy na máquina auto-hospedada é ma
 O download corresponde à última release com tag; a `main` pode conter trabalho
 mais recente.
 
-Tags SemVer como `v0.1.0` executam `.github/workflows/release.yml`. A tag deve corresponder a `apps/client/package.json` e apontar para um commit presente em `main`. O workflow verifica o projeto, cria os artefatos de Windows e Linux, gera checksums SHA-256 e publica uma GitHub Release.
+A versão **1.0.0** quebra compatibilidade com a release anterior: desktop, web e API precisam usar o protocolo de sala 2. Clientes antigos recebem da API uma resposta exigindo atualização. Veja as [notas da versão](CHANGELOG.md) para mudanças e limitações conhecidas.
+
+Tags SemVer como `v1.0.0` executam `.github/workflows/release.yml`. A tag deve corresponder a `apps/client/package.json` e apontar para um commit presente em `main`. O workflow verifica o projeto, cria os artefatos de Windows e Linux, gera checksums SHA-256 e publica uma GitHub Release.
 
 ## Privacidade e segurança
 

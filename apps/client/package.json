@@ -2,7 +2,7 @@
   "name": "@concord/client",
   "productName": "Concord",
   "desktopName": "Concord",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Private screen sharing for small groups",
   "author": "Concord Contributors",
   "repository": {

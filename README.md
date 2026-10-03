@@ -176,7 +176,9 @@ CI runs type checks, tests, lint, web/server builds, and Docker builds on pushes
 to `main` and pull requests. Deployment to the self-hosted machine is manual.
 The download reflects the latest tagged release; `main` may include newer work.
 
-SemVer tags such as `v0.1.0` trigger `.github/workflows/release.yml`. The tag must match `apps/client/package.json` and point to a commit contained in `main`. The workflow verifies the project, builds Windows and Linux artifacts, generates SHA-256 checksums, and publishes a GitHub Release.
+Version **1.0.0** introduces a compatibility break with the previous release: desktop, web, and API must use room protocol 2. Older clients receive an update-required response from the API. See [release notes](CHANGELOG.md) for changes and known limitations.
+
+SemVer tags such as `v1.0.0` trigger `.github/workflows/release.yml`. The tag must match `apps/client/package.json` and point to a commit contained in `main`. The workflow verifies the project, builds Windows and Linux artifacts, generates SHA-256 checksums, and publishes a GitHub Release.
 
 ## Privacy and security
 
