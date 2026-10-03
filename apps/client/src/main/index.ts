@@ -1,9 +1,9 @@
 import { app, BrowserWindow, session } from 'electron'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { registerCaptureHandlers } from './capture'
+import { hasPendingCaptureSelection, registerCaptureHandlers } from './capture'
 import { registerClipboardHandlers } from './clipboard'
-import { microphonePermission, trustedRendererUrl } from './permissions'
+import { displayCapturePermission, microphonePermission, trustedRendererUrl } from './permissions'
 import { startAutoUpdates } from './updater'
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined
@@ -49,8 +49,12 @@ function createMainWindow(): void {
   disposeClipboardHandlers = registerClipboardHandlers(mainWindow)
 
   appSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
-    callback(webContents === mainWindow?.webContents && microphonePermission(permission,
-      details.isMainFrame, details.requestingUrl, rendererUrl(), 'mediaTypes' in details ? details.mediaTypes ?? [] : []))
+    const mediaTypes = 'mediaTypes' in details ? details.mediaTypes ?? [] : []
+    callback(webContents === mainWindow?.webContents && (
+      microphonePermission(permission, details.isMainFrame, details.requestingUrl, rendererUrl(), mediaTypes) ||
+      displayCapturePermission(permission, details.isMainFrame, details.requestingUrl, rendererUrl(),
+        mediaTypes, mainWindow !== null && hasPendingCaptureSelection(mainWindow))
+    ))
   })
 
   appSession.setPermissionCheckHandler((webContents, permission, _origin, details) =>

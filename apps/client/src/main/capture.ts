@@ -4,14 +4,22 @@ import type { CaptureSelection, CaptureSourceDTO } from '../shared/capture'
 const SELECTION_TTL_MS = 10_000
 const MAX_SOURCE_ID_LENGTH = 512
 
-type PendingSelection = CaptureSelection & { expiresAt: number }
 type FrameIdentity = Pick<WebFrameMain, 'processId' | 'routingId'>
+type PendingSelection = CaptureSelection & { expiresAt: number; frame: FrameIdentity }
 
 const pendingSelections = new Map<number, PendingSelection>()
 
 function isMainFrameForRenderer(frame: WebFrameMain | null, rendererFrame: FrameIdentity): boolean {
   if (!frame || frame.parent !== null) return false
   return frame.processId === rendererFrame.processId && frame.routingId === rendererFrame.routingId
+}
+
+export function hasPendingCaptureSelection(mainWindow: BrowserWindow): boolean {
+  if (mainWindow.isDestroyed()) return false
+  const renderer = mainWindow.webContents
+  const selection = pendingSelections.get(renderer.id)
+  return !!selection && selection.expiresAt > Date.now() &&
+    isMainFrameForRenderer(renderer.mainFrame, selection.frame)
 }
 
 function isCaptureSelection(value: unknown): value is CaptureSelection {
@@ -46,10 +54,6 @@ async function loadSources(): Promise<CaptureSourceDTO[]> {
 export function registerCaptureHandlers(mainWindow: BrowserWindow, appSession: Session): () => void {
   const renderer = mainWindow.webContents
   const rendererId = renderer.id
-  const rendererFrame = {
-    processId: renderer.mainFrame.processId,
-    routingId: renderer.mainFrame.routingId,
-  }
   const isTrustedSender = (senderId: number) =>
     !mainWindow.isDestroyed() && senderId === rendererId
 
@@ -66,6 +70,10 @@ export function registerCaptureHandlers(mainWindow: BrowserWindow, appSession: S
     pendingSelections.set(event.sender.id, {
       ...value,
       expiresAt: Date.now() + SELECTION_TTL_MS,
+      frame: {
+        processId: renderer.mainFrame.processId,
+        routingId: renderer.mainFrame.routingId,
+      },
     })
   })
 
@@ -77,8 +85,9 @@ export function registerCaptureHandlers(mainWindow: BrowserWindow, appSession: S
     const selection = pendingSelections.get(rendererId)
     pendingSelections.delete(rendererId)
 
-    const isExpectedFrame = isMainFrameForRenderer(request.frame, rendererFrame)
-    if (!selection || selection.expiresAt < Date.now() || !isExpectedFrame) {
+    if (mainWindow.isDestroyed() || !selection || selection.expiresAt <= Date.now() ||
+      !isMainFrameForRenderer(request.frame, renderer.mainFrame) ||
+      !isMainFrameForRenderer(request.frame, selection.frame)) {
       callback({})
       return
     }
