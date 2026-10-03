@@ -162,9 +162,14 @@ input[type='radio'], input[type='checkbox'] { accent-color: var(--accent); }
 .stage-count { flex: none; color: var(--text-muted); font: 11px var(--font-mono); }
 .stage-canvas { position: relative; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); }
 .stage-banners { flex: none; display: grid; gap: 8px; padding: 8px; max-height: 45%; overflow: auto; }
-.stage-error, .stage-notice { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
-.stage-error button, .stage-notice button { flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: inherit; font-size: 20px; cursor: pointer; }
-.stage-error button:hover, .stage-notice button:hover { background: var(--surface-soft); }
+.toast-stack { position: absolute; z-index: 30; top: 12px; left: 50%; width: min(420px, calc(100% - 112px)); display: grid; gap: 8px; transform: translateX(-50%); pointer-events: none; }
+.toast { display: flex; align-items: start; gap: 10px; padding: 12px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-raised); box-shadow: 0 8px 24px rgb(0 0 0 / .25); color: var(--text-soft); pointer-events: none; }
+.toast p { margin: 0; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.toast-symbol { width: 18px; height: 18px; display: grid; place-items: center; flex: none; border: 1px solid currentColor; border-radius: 50%; color: var(--accent); font: 11px var(--font-mono); }
+.toast-error { border-color: var(--danger-border); }
+.toast-error .toast-symbol { color: var(--danger); }
+.toast-enter-active, .toast-leave-active { transition: opacity 160ms, transform 160ms; }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-6px); }
 .empty-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px; overflow: auto; text-align: center; }
 .empty-stage > .eyebrow { color: var(--text-muted); }
 .empty-stage h2 { margin: 16px 0 8px; font-size: 24px; font-weight: 500; letter-spacing: -.035em; }

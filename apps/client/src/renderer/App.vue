@@ -10,7 +10,9 @@ import MediaTile from './components/MediaTile.vue'
 import RemoteVoiceAudio from './components/RemoteVoiceAudio.vue'
 import SiteFooter from './components/SiteFooter.vue'
 import SourcePicker from './components/SourcePicker.vue'
+import ToastStack from './components/ToastStack.vue'
 import { useVoice } from './composables/useVoice'
+import { useToasts } from './composables/useToasts'
 import { stopMediaStream } from './domain/capture-cleanup'
 import { avatarUrl } from './domain/avatar'
 import { createRoomLink, roomCodeFromRoute } from './domain/room-link'
@@ -41,6 +43,7 @@ const localStream = ref<MediaStream | null>(null)
 const localPreview = ref<HTMLVideoElement | null>(null)
 const errorMessage = ref('')
 const shareNotice = ref('')
+const { toasts, notify } = useToasts()
 const copied = ref(false)
 const focusedShareKey = ref('')
 const frozenFrames = ref<Record<string, string>>({})
@@ -96,6 +99,16 @@ watch(
   { immediate: true },
 )
 
+watch(errorMessage, (message) => {
+  if (message && currentRoomCode.value) { notify(message, 'error'); errorMessage.value = '' }
+})
+watch(shareNotice, (message) => {
+  if (message) { notify(message); shareNotice.value = '' }
+})
+watch(voiceControls.notice, (message) => {
+  if (message) { notify(message); voiceControls.notice.value = '' }
+})
+
 roomService.onSnapshot((snapshot) => {
   if (currentRoomCode.value) presenceSounds.update(snapshot.participants)
   else presenceSounds.reset()
@@ -114,6 +127,9 @@ roomService.onChat((snapshot) => {
 })
 
 roomService.onConnection((state, message) => {
+  if (state === 'reconnecting' && roomState.value !== 'reconnecting' && currentRoomCode.value) {
+    notify('Reconectando à sala… Sua voz e tela continuam enquanto a conexão é recuperada.')
+  }
   roomState.value = state
   if (state === 'connected') {
     void measurePing()
@@ -476,13 +492,10 @@ onMounted(() => {
           @touchstart="wakeControls"
           @keydown="wakeControls"
         >
-          <div v-if="errorMessage || shareNotice || roomState !== 'connected'" class="stage-banners">
+          <div v-if="roomState === 'disconnected' || roomState === 'error'" class="stage-banners">
             <button v-if="roomState === 'disconnected' || roomState === 'error'" class="button secondary" @click="joinRoom(currentRoomCode)">Entrar novamente</button>
-            <div v-if="roomState === 'reconnecting'" class="notice-banner" role="status">Reconectando à sala… Sua voz e tela continuam enquanto a conexão é recuperada.</div>
-            <div v-if="errorMessage" class="error-banner stage-error" role="alert"><span>{{ errorMessage }}</span><button aria-label="Fechar erro" @click="errorMessage = ''">×</button></div>
-            <div v-if="shareNotice" class="notice-banner stage-notice" role="status"><span>{{ shareNotice }}</span><button aria-label="Fechar aviso" @click="shareNotice = ''">×</button></div>
-            <div v-if="voiceControls.notice.value" class="notice-banner stage-notice" role="status"><span>{{ voiceControls.notice.value }}</span><button aria-label="Fechar aviso" @click="voiceControls.notice.value = ''">×</button></div>
           </div>
+          <ToastStack :toasts="toasts" />
           <RemoteVoiceAudio :voices="voiceControls.remoteTracks.value" :deafened="voiceControls.voice.value.deafened" @click="voiceControls.resumeAudio" />
 
           <div v-if="participants.length === 0 && shares.length === 0 && !localStream" class="empty-stage">
