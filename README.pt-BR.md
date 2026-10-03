@@ -183,7 +183,7 @@ Tags SemVer como `v0.1.0` executam `.github/workflows/release.yml`. A tag deve c
 
 O Electron usa `nodeIntegration: false`, `contextIsolation: true`, sandbox e uma Content Security Policy restritiva. O preload expõe apenas operações de captura e escrita de texto na área de transferência. Seleções de fonte são vinculadas à janela solicitante, expiram em dez segundos e são consumidas uma vez.
 
-O microfone é solicitado somente quando o usuário pressiona o controle e nunca ativa uma câmera. Mensagens são apagadas a cada reconexão e nunca são recuperadas. Expiração de token ou falha persistente de conexão encerra todas as capturas e exige uma nova entrada.
+O microfone é solicitado somente quando o usuário pressiona o controle e nunca ativa uma câmera. O histórico do chat fica apenas na memória da API, limitado às últimas 500 mensagens, e pode ser recuperado ao entrar ou reconectar enquanto a conversa permanecer ativa. Ele é apagado imediatamente quando a última conexão ativa cai ou a API reinicia; nada é gravado em disco. Se as credenciais expirarem sem renovação ou o prazo de recuperação terminar, todas as capturas são encerradas e é necessário entrar novamente.
 
 Relate vulnerabilidades de forma privada conforme [SECURITY.md](SECURITY.md).
 
