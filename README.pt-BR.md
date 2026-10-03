@@ -149,7 +149,7 @@ Execute exatamente uma instância de `server`: presença, tokens e publicações
 
 Os logs do servidor são JSON estruturado. O cliente envia erros, avisos, perda de conexão e recuperação para `/v1/client-events`; uma fila limitada em memória tenta reenviar quando a conexão volta. Os relatos contêm ID temporário do cliente, plataforma, evento, nível e classificação limitada do erro. Não incluem código da sala, nome, token, SDP ou conteúdo do chat. Eventos pendentes se perdem ao fechar o aplicativo.
 
-O Concord usa STUN da Cloudflare e não configura relay TURN. Portanto, redes que exigem relay não são suportadas. A disponibilidade de áudio na captura web depende do navegador, sistema operacional e fonte escolhida; quando o áudio não está disponível, o vídeo continua com um aviso.
+O Concord usa STUN da Cloudflare por padrão. Para atender redes que exigem relay TURN, configure `CLOUDFLARE_TURN_KEY_ID` e `CLOUDFLARE_TURN_API_TOKEN` juntos no servidor; a API gera credenciais ICE temporárias para os clientes. Sem essa configuração, redes que dependem de relay não são suportadas. A disponibilidade de áudio na captura web depende do navegador, sistema operacional e fonte escolhida; quando o áudio não está disponível, o vídeo continua com um aviso.
 
 ## Desenvolvimento
 

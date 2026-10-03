@@ -36,8 +36,15 @@ permissions, capture, and connectivity.
 - [ ] Copy an invite in the web and desktop clients and open it on the other device.
 - [ ] Check the landing page and room on mobile and desktop, including keyboard
       focus, readable controls, and permission error messages.
+- [ ] Check fullscreen on mobile and tablet. Trigger room notifications and confirm
+      that toasts expire automatically and allow clicks on controls beneath them.
+- [ ] With desktop development running, run `pnpm build:web`; the web output must
+      not reload the desktop renderer or interrupt its active session.
 - [ ] For a release, install and launch the Windows NSIS and Linux AppImage builds;
       check update behavior separately from portable ZIP builds.
 
-Connectivity requiring a TURN relay is currently unsupported. Note such a network
-restriction separately from a regression.
+Connectivity requiring a TURN relay needs both `CLOUDFLARE_TURN_KEY_ID` and
+`CLOUDFLARE_TURN_API_TOKEN` on the server. Test from different networks and record
+whether TURN is enabled. If a timeout occurs, record `causeMessage` from the local
+console and the ICE connection states; a later successful connection does not
+establish the cause of the earlier failure.

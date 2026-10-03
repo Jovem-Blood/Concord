@@ -37,8 +37,15 @@ regras; estas verificações exercitam permissões, captura e conectividade reai
 - [ ] Copie um convite nos clientes web e desktop e abra-o no outro dispositivo.
 - [ ] Confira a página inicial e a sala no celular e no desktop, incluindo foco de
       teclado, controles legíveis e mensagens de erro de permissão.
+- [ ] Confira fullscreen no celular e tablet. Provoque notificações da sala e confirme
+      que os toasts somem automaticamente e permitem clicar nos controles abaixo deles.
+- [ ] Com o desenvolvimento desktop aberto, execute `pnpm build:web`; o resultado
+      do build web não deve recarregar o desktop nem interromper a sessão ativa.
 - [ ] Para uma release, instale e abra os builds NSIS no Windows e AppImage no Linux;
       confira as atualizações separadamente dos ZIPs portáteis.
 
-Conectividade que exige relay TURN ainda não é suportada. Registre essa restrição
-de rede separadamente de uma regressão.
+Conectividade que exige relay TURN precisa de `CLOUDFLARE_TURN_KEY_ID` e
+`CLOUDFLARE_TURN_API_TOKEN` juntos no servidor. Teste em redes diferentes e registre
+se TURN está habilitado. Se ocorrer um timeout, registre `causeMessage` do console
+local e os estados da conexão ICE; uma conexão posterior bem-sucedida não
+estabelece a causa da falha anterior.
