@@ -3,6 +3,7 @@ import type { CaptureResolution } from '../../../shared/capture'
 import { serverUrl, type JoinResponse } from '../server'
 import type { MediaSource, PublishedTrack, RemoteShareView, RemoteVoiceTrack, RoomPresence, RoomSnapshot, SfuResponse } from './types'
 import { logClient } from '../telemetry'
+import { waitForIceGathering } from './ice'
 
 type ConnectionState = 'connected' | 'reconnecting' | 'disconnected'
 type Subscription = { source: PublishedTrack; mid: string }
@@ -244,6 +245,7 @@ export class CloudflareRoomService {
       await pc.setRemoteDescription(result.sessionDescription)
       if (result.sessionDescription.type === 'offer') {
         await pc.setLocalDescription(await pc.createAnswer())
+        await waitForIceGathering(pc, this.controller.signal)
         await this.api('renegotiate', { sessionDescription: pc.localDescription!.toJSON() })
       }
     } else if (result.requiresImmediateRenegotiation) {
@@ -281,6 +283,8 @@ export class CloudflareRoomService {
       this.localTransceivers.set(source, transceiver)
     }
     await pc.setLocalDescription(await pc.createOffer())
+    // This HTTP signaling flow has no trickle ICE: include gathered candidates in SDP.
+    await waitForIceGathering(pc, this.controller.signal)
     // Browser track IDs are opaque; use our own portable names in the signaling API.
     const publications = tracks.map(({ source }) => {
       const transceiver = this.localTransceivers.get(source)!
@@ -430,7 +434,10 @@ export class CloudflareRoomService {
         else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') finish(new Error('WebRTC connection failed'))
       }
       const abort = () => finish(new DOMException('Session closed', 'AbortError'))
-      const timeout = setTimeout(() => finish(new Error('WebRTC connection timed out')), 20_000)
+      const timeout = setTimeout(() => finish(new DOMException(
+        `WebRTC connection timed out (connection=${pc.connectionState}, ice=${pc.iceConnectionState}, gathering=${pc.iceGatheringState})`,
+        'TimeoutError',
+      )), 20_000)
       pc.addEventListener('connectionstatechange', check)
       signal.addEventListener('abort', abort, { once: true })
       if (signal.aborted) abort(); else check()

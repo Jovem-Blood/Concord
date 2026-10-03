@@ -14,6 +14,7 @@ class FakeTrack {
 class FakePeer extends EventTarget {
   static instances: FakePeer[] = []
   connectionState = 'new'
+  iceGatheringState = 'complete'
   onconnectionstatechange: (() => void) | null = null
   ontrack: ((event: { track: FakeTrack }) => void) | null = null
   localDescription: { toJSON: () => unknown } | null = null
@@ -48,6 +49,7 @@ const services: CloudflareRoomService[] = []
 afterEach(async () => {
   await Promise.all(services.splice(0).map((service) => service.disconnect()))
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
   vi.useRealTimers()
   FakePeer.instances = []
 })
@@ -103,6 +105,45 @@ function setup() {
 }
 
 describe('Cloudflare WebRTC room lifecycle', () => {
+  it('sends the gathered offer instead of the initial candidate-free SDP', async () => {
+    const { connect, service, stream, calls } = setup()
+    const setLocal = FakePeer.prototype.setLocalDescription
+    vi.spyOn(FakePeer.prototype, 'setLocalDescription').mockImplementation(async function (this: FakePeer, description) {
+      await setLocal.call(this, description)
+      this.iceGatheringState = 'gathering'
+    })
+    await connect()
+    const publishing = service.publishScreen(stream(false).media, '720p')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(calls.some((call) => call.path === 'tracks')).toBe(false)
+    const peer = FakePeer.instances[0]!
+    peer.localDescription = { toJSON: () => ({ type: 'offer', sdp: 'gathered-offer-sdp' }) }
+    peer.iceGatheringState = 'complete'
+    peer.dispatchEvent(new Event('icegatheringstatechange'))
+    await publishing
+    expect(calls.find((call) => call.path === 'tracks')!.body.sessionDescription).toEqual({ type: 'offer', sdp: 'gathered-offer-sdp' })
+  })
+
+  it('waits for candidates before sending the answer to an SFU subscription offer', async () => {
+    const { connect, service, presence, calls } = setup()
+    const setLocal = FakePeer.prototype.setLocalDescription
+    vi.spyOn(FakePeer.prototype, 'setLocalDescription').mockImplementation(async function (this: FakePeer, description) {
+      await setLocal.call(this, description)
+      this.iceGatheringState = 'gathering'
+    })
+    await connect()
+    presence.tracks.push({ sessionId: 'remote-session', trackName: 'screen', kind: 'video', source: 'screen-video', participantIdentity: 'remote', participantName: 'Remote' })
+    service.updatePresence(presence)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(calls.some((call) => call.path === 'renegotiate')).toBe(false)
+    const peer = FakePeer.instances[0]!
+    peer.localDescription = { toJSON: () => ({ type: 'answer', sdp: 'gathered-answer-sdp' }) }
+    peer.iceGatheringState = 'complete'
+    peer.dispatchEvent(new Event('icegatheringstatechange'))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(calls.find((call) => call.path === 'renegotiate')!.body.sessionDescription).toEqual({ type: 'answer', sdp: 'gathered-answer-sdp' })
+  })
+
   it('stops local capture synchronously while the room controller owns departure', async () => {
     const { connect, service, stream, calls } = setup()
     await connect()
