@@ -63,12 +63,17 @@ if (browser) window.addEventListener('online', () => { void flush() })
 
 export function logClient(level: LogLevel, event: string, options: { error?: unknown; code?: string; attempt?: number } = {}): void {
   const reason = options.error === undefined ? undefined : reasonFor(options.error)
+  const code = options.code ?? (options.error instanceof AppError ? options.error.code : undefined)
+  const cause = options.error instanceof AppError ? options.error.cause : undefined
   const entry: ClientEvent = { level, event, clientId, platform,
-    ...(options.code ? { code: options.code } : {}), ...(reason ? { reason } : {}),
+    ...(code ? { code } : {}), ...(reason ? { reason } : {}),
     ...(options.attempt !== undefined ? { attempt: Math.min(1000, options.attempt) } : {}) }
   if (levels.indexOf(level) <= levels.indexOf(consoleLevel)) {
     const method = level === 'debug' ? 'debug' : level === 'info' ? 'info' : level === 'warn' ? 'warn' : 'error'
-    console[method](`[${level}] ${event}`, { code: options.code, reason, attempt: options.attempt, error: options.error })
+    // Expose the underlying failure locally; upstream reports remain classified only.
+    console[method](`[${level}] ${event}`, { code, reason, attempt: options.attempt, error: options.error,
+      ...(cause === undefined ? {} : { cause,
+        ...(cause instanceof Error ? { causeMessage: cause.message } : {}) }) })
   }
   if (level === 'debug' && consoleLevel !== 'debug') return
   if (pending.length >= 20) pending.shift()
