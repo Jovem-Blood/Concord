@@ -83,6 +83,14 @@ input[type='radio'], input[type='checkbox'] { accent-color: var(--accent); }
 .welcome-message h1 span { color: var(--text-muted); }
 .welcome-message > p:last-child { max-width: 390px; margin: 0; color: var(--text-soft); font-size: 14px; line-height: 1.7; }
 .privacy-note { margin: 0; color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; line-height: 1.6; }
+.welcome-details { display: grid; gap: 20px; }
+.desktop-download-notice { display: flex; align-items: flex-start; gap: 14px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.desktop-download-icon { width: 24px; height: 24px; flex: none; color: var(--accent); }
+.desktop-download-notice h2 { margin: 0; font-size: 13px; font-weight: 550; line-height: 1.5; }
+.desktop-download-notice p { margin: 4px 0 10px; color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+.desktop-download-notice a { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: 12px; font-weight: 550; line-height: 1.5; text-decoration: none; text-underline-offset: 4px; }
+.desktop-download-notice a:hover { text-decoration: underline; }
+.desktop-download-notice a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 2px; }
 .welcome-card { min-width: 0; align-self: center; padding: 40px 0 40px 64px; }
 .access-header { margin-bottom: 32px; }
 .access-header h2 { margin: 12px 0; font-size: 24px; font-weight: 550; letter-spacing: -.035em; line-height: 1.2; }

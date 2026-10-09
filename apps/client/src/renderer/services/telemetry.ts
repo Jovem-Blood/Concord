@@ -72,6 +72,7 @@ export function logClient(level: LogLevel, event: string, options: { error?: unk
     const method = level === 'debug' ? 'debug' : level === 'info' ? 'info' : level === 'warn' ? 'warn' : 'error'
     // Expose the underlying failure locally; upstream reports remain classified only.
     console[method](`[${level}] ${event}`, { code, reason, attempt: options.attempt, error: options.error,
+      ...(options.error instanceof Error ? { errorMessage: options.error.message } : {}),
       ...(cause === undefined ? {} : { cause,
         ...(cause instanceof Error ? { causeMessage: cause.message } : {}) }) })
   }

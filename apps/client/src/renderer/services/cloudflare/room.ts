@@ -10,7 +10,10 @@ type Subscription = { source: PublishedTrack; mid: string }
 const trackKey = (track: PublishedTrack) => `${track.sessionId}:${track.trackName}`
 
 export class SignalingError extends Error {
-  constructor(public readonly status: number) { super(`Room API responded with ${status}`) }
+  constructor(public readonly status: number) {
+    super(`Room API responded with ${status}`)
+    this.name = 'SignalingError'
+  }
 }
 
 const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.cloudflare.com:3478' }]
@@ -241,6 +244,10 @@ export class CloudflareRoomService {
   }
 
   private async negotiate(result: SfuResponse, pc: RTCPeerConnection): Promise<void> {
+    const failures = result.tracks?.filter((track) => track.errorCode)
+    if (failures?.length) {
+      throw new Error(`SFU could not process tracks: ${failures.map((track) => track.errorCode).join(', ')}`)
+    }
     if (result.sessionDescription) {
       await pc.setRemoteDescription(result.sessionDescription)
       if (result.sessionDescription.type === 'offer') {
@@ -251,7 +258,6 @@ export class CloudflareRoomService {
     } else if (result.requiresImmediateRenegotiation) {
       throw new Error('SFU requested renegotiation without an SDP offer')
     }
-    if (result.tracks?.some((track) => track.errorCode)) throw new Error('SFU could not process all tracks')
   }
 
   private async publish(): Promise<void> {

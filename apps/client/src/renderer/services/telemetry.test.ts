@@ -17,6 +17,9 @@ it('queues offline errors and sends only classified diagnostics after reconnecti
     const { logClient } = await import('./telemetry')
     logClient('error', 'room.join.failed', { error: new Error('private room ABCD2345; Bearer secret'), code: 'ROOM_TOKEN_FAILED' })
     expect(fetcher).not.toHaveBeenCalled()
+    expect(consoleError).toHaveBeenLastCalledWith('[error] room.join.failed', expect.objectContaining({
+      errorMessage: 'private room ABCD2345; Bearer secret',
+    }))
     network.onLine = true
     listeners.get('online')?.()
     await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce())
@@ -28,13 +31,14 @@ it('queues offline errors and sends only classified diagnostics after reconnecti
     const cause = new DOMException('private network details; Bearer secret', 'TimeoutError')
     logClient('error', 'screen.start.failed', { error: new AppError('TRACK_PUBLISH_FAILED', 'Publication failed', { cause }) })
     expect(consoleError).toHaveBeenLastCalledWith('[error] screen.start.failed', expect.objectContaining({
-      code: 'TRACK_PUBLISH_FAILED', cause, causeMessage: cause.message,
+      code: 'TRACK_PUBLISH_FAILED', errorMessage: 'Publication failed', cause, causeMessage: cause.message,
     }))
     await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
     const failure = JSON.parse(fetcher.mock.calls[1]![1].body as string)
     expect(failure).toMatchObject({ code: 'TRACK_PUBLISH_FAILED', reason: 'TimeoutError' })
     expect(failure).not.toHaveProperty('cause')
     expect(failure).not.toHaveProperty('causeMessage')
+    expect(failure).not.toHaveProperty('errorMessage')
     expect(JSON.stringify(failure)).not.toContain('private network')
     expect(JSON.stringify(failure)).not.toContain('secret')
   } finally {

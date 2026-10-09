@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CloudflareRoomService } from './room'
+import { CloudflareRoomService, SignalingError } from './room'
 import type { RoomPresence, RoomSnapshot } from './types'
 import { PresenceSoundNotifier } from '../sounds'
 
@@ -99,12 +99,36 @@ function setup() {
     return { tracks, media: { getTracks: () => tracks, getVideoTracks: () => tracks.filter((t) => t.kind === 'video'), getAudioTracks: () => tracks.filter((t) => t.kind === 'audio') } as unknown as MediaStream }
   }
   return {
-    service, presence, calls, states, snapshots, connect, stream, update,
+    service, presence, calls, states, snapshots, connect, stream, update, fetcher,
     failNextSession: (status: number) => { nextSessionStatus = status },
   }
 }
 
 describe('Cloudflare WebRTC room lifecycle', () => {
+  it('identifies signaling errors for classified diagnostics', () => {
+    expect(new SignalingError(503)).toMatchObject({ name: 'SignalingError', status: 503 })
+  })
+
+  it('preserves per-track SFU errors before applying a rejected SDP and stops the microphone', async () => {
+    const { connect, service, fetcher } = setup()
+    await connect()
+    fetcher.mockResolvedValueOnce(new Response('{"sessionId":"local-session"}'))
+      .mockResolvedValueOnce(new Response('{}'))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        tracks: [{ errorCode: 'invalid_session_description' }],
+        sessionDescription: { type: 'answer', sdp: 'invalid-sdp' },
+      })))
+    const setRemote = vi.spyOn(FakePeer.prototype, 'setRemoteDescription')
+    const microphone = new FakeTrack('audio', 'microphone')
+    await expect(service.publishMicrophone(microphone as unknown as MediaStreamTrack)).rejects.toMatchObject({
+      code: 'TRACK_PUBLISH_FAILED',
+      cause: expect.objectContaining({ message: 'SFU could not process tracks: invalid_session_description' }),
+    })
+    expect(setRemote).not.toHaveBeenCalled()
+    expect(microphone.readyState).toBe('ended')
+    expect(FakePeer.instances[0]!.connectionState).toBe('closed')
+  })
+
   it('sends the gathered offer instead of the initial candidate-free SDP', async () => {
     const { connect, service, stream, calls } = setup()
     const setLocal = FakePeer.prototype.setLocalDescription

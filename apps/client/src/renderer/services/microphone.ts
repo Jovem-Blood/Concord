@@ -1,4 +1,5 @@
 import type { VoiceState } from './cloudflare/types'
+import { AppError } from '../../shared/errors'
 import { logClient } from './telemetry'
 
 type Publisher = { publishMicrophone(track: MediaStreamTrack): Promise<void>; unpublishMicrophone(): Promise<void> }
@@ -54,6 +55,7 @@ export class MicrophoneService {
   private emit(): void { this.changed({ ...this.state }, this.track, this.busy) }
 }
 export function microphoneError(error: unknown): string {
+  if (error instanceof AppError) return error.message
   const name = error instanceof Error ? error.name : ''
   if (name === 'NotAllowedError' || name === 'SecurityError') return 'Microfone não autorizado. Libere a permissão e tente novamente. Você pode continuar ouvindo e usando o chat.'
   if (name === 'NotFoundError') return 'Nenhum microfone encontrado. Conecte um dispositivo e tente novamente.'

@@ -6,6 +6,7 @@ import type { AppError } from '../shared/errors'
 import ConcordBrand from './components/ConcordBrand.vue'
 import CallControls from './components/CallControls.vue'
 import ChatPanel from './components/ChatPanel.vue'
+import DesktopDownloadNotice from './components/DesktopDownloadNotice.vue'
 import MediaTile from './components/MediaTile.vue'
 import RemoteVoiceAudio from './components/RemoteVoiceAudio.vue'
 import SiteFooter from './components/SiteFooter.vue'
@@ -412,7 +413,10 @@ onMounted(() => {
           <h1>Mostre sua tela.<br /><span>Continue a conversa.</span></h1>
           <p>Converse por voz, troque mensagens efêmeras e compartilhe sua tela, sem contas ou configuração demorada.</p>
         </div>
-        <p class="privacy-note">Acesso somente por código ou link</p>
+        <div class="welcome-details">
+          <DesktopDownloadNotice v-if="captureEnvironment === 'web'" />
+          <p class="privacy-note">Acesso somente por código ou link</p>
+        </div>
       </div>
 
       <section class="welcome-card" aria-labelledby="access-title">
@@ -438,7 +442,7 @@ onMounted(() => {
         <button v-if="invitedRoomCode" class="button primary full" :disabled="!canSubmit" @click="joinRoom(invitedRoomCode)">
           Entrar na sala
         </button>
-        <button v-else class="button primary full" :disabled="!canSubmit" @click="createRoom">Criar sala agora</button>
+        <button v-else class="button primary full" :disabled="!canSubmit" @click="createRoom" @keydown.enter="createRoom">Criar sala agora</button>
 
         <div class="divider"><span>{{ invitedRoomCode ? 'Entrar com outro código' : 'Já tem um código?' }}</span></div>
         <div class="join-row">

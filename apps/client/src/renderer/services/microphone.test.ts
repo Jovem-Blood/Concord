@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MicrophoneService } from './microphone'
+import { AppError } from '../../shared/errors'
 
 class Track {
   kind = 'audio'; readyState = 'live'; enabled = true; onended: (() => void) | null = null
@@ -7,6 +8,28 @@ class Track {
 }
 afterEach(() => vi.unstubAllGlobals())
 describe('microphone lifecycle', () => {
+  it('reports publication failures separately from microphone access failures and permits retry', async () => {
+    const track = new Track()
+    const replacement = new Track()
+    const stream = (audio: Track) => ({ getAudioTracks: () => [audio], getTracks: () => [audio] })
+    const getUserMedia = vi.fn().mockResolvedValueOnce(stream(track)).mockResolvedValueOnce(stream(replacement))
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } })
+    const failure = new AppError('TRACK_PUBLISH_FAILED', 'Não foi possível transmitir o microfone. Tente novamente.', {
+      cause: new Error('SFU could not process tracks: invalid_session_description'),
+    })
+    const publisher = { publishMicrophone: vi.fn().mockRejectedValueOnce(failure).mockResolvedValueOnce(undefined),
+      unpublishMicrophone: vi.fn(async () => undefined) }
+    const changed = vi.fn()
+    const error = vi.fn()
+    const service = new MicrophoneService(publisher, changed, error)
+    await service.toggle()
+    expect(error).toHaveBeenCalledWith(failure.message)
+    expect(track.readyState).toBe('ended')
+    expect(changed).toHaveBeenLastCalledWith(expect.objectContaining({ joined: false, muted: true }), null, false)
+    await service.toggle()
+    expect(changed).toHaveBeenLastCalledWith(expect.objectContaining({ joined: true, muted: false }), replacement, false)
+    service.reset()
+  })
   it('asks for audio only on activation and mutes without signaling', async () => {
     const track = new Track()
     const getUserMedia = vi.fn(async () => ({ getAudioTracks: () => [track], getTracks: () => [track] }))
