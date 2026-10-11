@@ -20,7 +20,7 @@ describe('capture provider', () => {
     expect(result).toBe(stream)
     expect(provider.capabilities).toMatchObject({ environment: 'web', systemAudio: 'optional' })
     expect(getDisplayMedia).toHaveBeenCalledWith(expect.objectContaining({
-      audio: true,
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       systemAudio: 'include',
       video: {
         width: { ideal: 1280, max: 1280 },
@@ -55,11 +55,35 @@ describe('capture provider', () => {
     expect(calls).toEqual(['select', 'capture'])
     expect(provider.capabilities.environment).toBe('electron')
     expect(getDisplayMedia).toHaveBeenCalledWith(expect.objectContaining({
+      audio: false,
       video: {
         width: { ideal: 1920, max: 1920 },
         height: { ideal: 1080, max: 1080 },
         frameRate: { ideal: 30, max: 30 },
       },
+    }))
+  })
+
+  it('captures Electron system audio without speech filters or room playback', async () => {
+    const captureAPI: CaptureAPI = {
+      listSources: vi.fn().mockResolvedValue([]),
+      selectSource: vi.fn().mockResolvedValue(undefined),
+      cancelSelection: vi.fn().mockResolvedValue(undefined),
+    }
+    const getDisplayMedia = vi.fn().mockResolvedValue({} as MediaStream)
+    vi.stubGlobal('window', { captureAPI })
+    vi.stubGlobal('navigator', { mediaDevices: { getDisplayMedia } })
+    const { createCaptureProvider } = await import('./provider')
+
+    await createCaptureProvider().capture({
+      source: { id: 'window:1:0', name: 'Player', thumbnail: '', kind: 'window' },
+      includeSystemAudio: true,
+      resolution: '720p',
+    })
+
+    expect(captureAPI.selectSource).toHaveBeenCalledWith({ sourceId: 'window:1:0', includeSystemAudio: true })
+    expect(getDisplayMedia).toHaveBeenCalledWith(expect.objectContaining({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, restrictOwnAudio: true },
     }))
   })
 })

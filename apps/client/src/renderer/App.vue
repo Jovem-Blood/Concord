@@ -308,6 +308,7 @@ async function startSharing(
     if (!videoTrack) throw new Error('Missing video track')
     videoTrack.contentHint = 'motion'
     videoTrack.onended = () => void stopSharing()
+    for (const audioTrack of stream.getAudioTracks()) audioTrack.contentHint = 'music'
 
     if (includeSystemAudio && stream.getAudioTracks().length === 0 && captureEnvironment === 'web') {
       shareNotice.value = 'A tela está sendo transmitida sem áudio. O navegador ou a fonte escolhida não ofereceu áudio.'

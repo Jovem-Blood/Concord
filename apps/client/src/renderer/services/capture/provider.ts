@@ -29,6 +29,21 @@ type ExtendedDisplayMediaOptions = DisplayMediaStreamOptions & {
   systemAudio?: 'include' | 'exclude'
 }
 
+type ScreenAudioConstraints = MediaTrackConstraints & { restrictOwnAudio?: boolean }
+
+function audioConstraints(includeSystemAudio: boolean, environment: CaptureEnvironment): ScreenAudioConstraints | false {
+  if (!includeSystemAudio) return false
+  // Preserve media dynamics instead of applying the microphone's speech filters.
+  return {
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false,
+    // Electron excludes its own playback from native loopback on Windows/macOS.
+    // Keep room voices out of the share without filtering the captured media.
+    ...(environment === 'electron' ? { restrictOwnAudio: true } : {}),
+  }
+}
+
 function videoConstraints(resolution: CaptureResolution): MediaTrackConstraints {
   return resolution === '720p'
     ? {
@@ -69,7 +84,7 @@ class BrowserCaptureProvider implements CaptureProvider {
     const getDisplayMedia = requireDisplayCapture()
     const options: ExtendedDisplayMediaOptions = {
       video: videoConstraints(request.resolution),
-      audio: request.includeSystemAudio,
+      audio: audioConstraints(request.includeSystemAudio, 'web'),
       monitorTypeSurfaces: 'include',
       selfBrowserSurface: 'exclude',
       surfaceSwitching: 'include',
@@ -106,7 +121,7 @@ class ElectronCaptureProvider implements CaptureProvider {
     try {
       return await requireDisplayCapture()({
         video: videoConstraints(request.resolution),
-        audio: request.includeSystemAudio,
+        audio: audioConstraints(request.includeSystemAudio, 'electron'),
       })
     } catch (error) {
       await api.cancelSelection()
