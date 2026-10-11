@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { RemoteShareView } from '../services/cloudflare/types'
+import { playbackLevel, type AudioLevel } from '../services/audio-level'
 
-const props = defineProps<{ share: RemoteShareView; focused: boolean; deafened: boolean; placeholder?: string }>()
-const emit = defineEmits<{ focus: []; frame: [dataUrl: string] }>()
+const props = defineProps<{ share: RemoteShareView; focused: boolean; deafened: boolean; volume: number; outputDeviceId: string; level?: AudioLevel; placeholder?: string }>()
+const emit = defineEmits<{ focus: []; frame: [dataUrl: string]; audioError: [message: string] }>()
 
 const videoElement = ref<HTMLVideoElement | null>(null)
 const audioElement = ref<HTMLAudioElement | null>(null)
@@ -14,9 +15,21 @@ function attach(): void {
   if (videoElement.value) videoElement.value.srcObject = props.share.videoTrack ? new MediaStream([props.share.videoTrack]) : null
   if (audioElement.value) {
     audioElement.value.srcObject = props.share.audioTrack ? new MediaStream([props.share.audioTrack]) : null
-    audioElement.value.muted = props.deafened
+    applyLevel()
+    void applyDevice()
     if (props.share.audioTrack) void playAudio()
   }
+}
+async function applyDevice(): Promise<void> {
+  if (!audioElement.value || typeof audioElement.value.setSinkId !== 'function') return
+  try { await audioElement.value.setSinkId(props.outputDeviceId) }
+  catch { emit('audioError', 'Não foi possível usar a saída de áudio selecionada para a transmissão.') }
+}
+function applyLevel(): void {
+  if (!audioElement.value) return
+  const level = playbackLevel(props.volume, props.deafened, props.level)
+  audioElement.value.volume = level.volume
+  audioElement.value.muted = level.muted
 }
 
 function captureFrame(): void {
@@ -57,9 +70,11 @@ watch([() => props.share.videoTrack, () => props.share.audioTrack], () => {
 })
 watch(() => props.placeholder, (placeholder) => { frameCaptured = Boolean(placeholder) })
 watch(() => props.deafened, (deafened) => {
-  if (audioElement.value) audioElement.value.muted = deafened
+  applyLevel()
   if (!deafened && props.share.audioTrack) void playAudio()
 })
+watch([() => props.volume, () => props.level], applyLevel, { deep: true })
+watch(() => props.outputDeviceId, applyDevice)
 onMounted(() => { attach(); requestAnimationFrame(captureFrame) })
 onBeforeUnmount(detach)
 </script>
@@ -82,7 +97,7 @@ onBeforeUnmount(detach)
     <footer>
       <span class="live-label"><span v-if="share.videoTrack" class="live-dot" aria-hidden="true" />{{ share.videoTrack ? 'Ao vivo' : 'Prévia' }}</span>
       <strong>{{ share.participantName }}</strong>
-      <span class="audio-badge">{{ share.audioTrack ? (audioBlocked ? 'Áudio pausado' : 'Com áudio') : 'Sem áudio' }}</span>
+      <span class="audio-badge">{{ share.audioTrack ? (level?.muted ? 'Silenciada para você' : audioBlocked ? 'Áudio pausado' : 'Com áudio') : 'Sem áudio' }}</span>
       <button v-if="audioBlocked" class="audio-button" @click.stop="playAudio">Ativar áudio</button>
     </footer>
   </article>

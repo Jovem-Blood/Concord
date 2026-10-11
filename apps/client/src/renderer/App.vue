@@ -5,6 +5,7 @@ import type { CaptureResolution, CaptureSourceDTO } from '../shared/capture'
 import type { AppError } from '../shared/errors'
 import ConcordBrand from './components/ConcordBrand.vue'
 import CallControls from './components/CallControls.vue'
+import AudioMenu from './components/AudioMenu.vue'
 import ChatPanel from './components/ChatPanel.vue'
 import DesktopDownloadNotice from './components/DesktopDownloadNotice.vue'
 import MediaTile from './components/MediaTile.vue'
@@ -27,10 +28,36 @@ import type { ParticipantView, RemoteShareView } from './services/cloudflare/typ
 import { PresenceSoundNotifier, soundPlayer } from './services/sounds'
 import { serverUrl } from './services/server'
 import { logClient } from './services/telemetry'
+import type { AudioLevel } from './services/audio-level'
 
 const roomService = new RoomSession()
 const presenceSounds = new PresenceSoundNotifier()
 const voiceControls = useVoice(roomService)
+const participantLevels = ref<Record<string, AudioLevel>>({})
+const shareLevels = ref<Record<string, AudioLevel>>({})
+const contextAudioMenu = ref<InstanceType<typeof AudioMenu> | null>(null)
+const audioTarget = ref<{ kind: 'local' | 'participant' | 'share'; key: string; label: string } | null>(null)
+const targetLevel = computed<AudioLevel>(() => {
+  if (audioTarget.value?.kind === 'local') return { volume: voiceControls.microphoneVolume.value, muted: voiceControls.voice.value.muted }
+  const levels = audioTarget.value?.kind === 'share' ? shareLevels.value : participantLevels.value
+  return levels[audioTarget.value?.key ?? ''] ?? { volume: 100, muted: false }
+})
+function openAudioMenu(event: MouseEvent | KeyboardEvent, kind: 'local' | 'participant' | 'share', key: string, label: string): void {
+  audioTarget.value = { kind, key, label }
+  contextAudioMenu.value?.openAt(event)
+}
+function setTargetVolume(volume: number): void {
+  if (!audioTarget.value) return
+  if (audioTarget.value.kind === 'local') { voiceControls.setMicrophoneVolume(volume); return }
+  const levels = audioTarget.value.kind === 'share' ? shareLevels : participantLevels
+  levels.value = { ...levels.value, [audioTarget.value.key]: { ...targetLevel.value, volume } }
+}
+function toggleTargetMute(): void {
+  if (!audioTarget.value) return
+  if (audioTarget.value.kind === 'local') { voiceControls.toggleMicrophone(); return }
+  const levels = audioTarget.value.kind === 'share' ? shareLevels : participantLevels
+  levels.value = { ...levels.value, [audioTarget.value.key]: { ...targetLevel.value, muted: !targetLevel.value.muted } }
+}
 const route = useRoute()
 const router = useRouter()
 const displayName = ref(localStorage.getItem('displayName') ?? '')
@@ -116,6 +143,12 @@ roomService.onSnapshot((snapshot) => {
   participants.value = snapshot.participants
   shares.value = snapshot.shares
   const shareKeys = new Set(snapshot.shares.map((share) => share.key))
+  const participantKeys = new Set(snapshot.participants.map((participant) => participant.identity))
+  participantLevels.value = Object.fromEntries(Object.entries(participantLevels.value).filter(([key]) => participantKeys.has(key)))
+  shareLevels.value = Object.fromEntries(Object.entries(shareLevels.value).filter(([key]) => shareKeys.has(key)))
+  if (audioTarget.value && !(audioTarget.value.kind === 'share' ? shareKeys : participantKeys).has(audioTarget.value.key)) {
+    contextAudioMenu.value?.close(); audioTarget.value = null
+  }
   frozenFrames.value = Object.fromEntries(Object.entries(frozenFrames.value).filter(([key]) => shareKeys.has(key)))
   voiceControls.remoteTracks.value = snapshot.remoteVoiceTracks
   if (focusedShareKey.value && focusedShareKey.value !== 'local' && !snapshot.shares.some((share) => share.key === focusedShareKey.value)) {
@@ -498,7 +531,13 @@ onMounted(() => {
             <button v-if="roomState === 'disconnected' || roomState === 'error'" class="button secondary" @click="joinRoom(currentRoomCode)">Entrar novamente</button>
           </div>
           <ToastStack :toasts="toasts" />
-          <RemoteVoiceAudio :voices="voiceControls.remoteTracks.value" :deafened="voiceControls.voice.value.deafened" @click="voiceControls.resumeAudio" />
+          <RemoteVoiceAudio :voices="voiceControls.remoteTracks.value" :deafened="voiceControls.voice.value.deafened" :volume="voiceControls.outputVolume.value" :levels="participantLevels" :output-device-id="voiceControls.outputDeviceId.value" @audio-error="notify($event, 'error')" @click="voiceControls.resumeAudio" />
+          <AudioMenu
+            ref="contextAudioMenu" :label="audioTarget?.label ?? 'Áudio'" :volume="targetLevel.volume" :muted="targetLevel.muted"
+            :mute-label="audioTarget?.kind === 'local' ? 'Silenciar microfone' : 'Silenciar para mim'"
+            :disabled="audioTarget?.kind === 'local' && (voiceControls.busy.value || (roomState !== 'connected' && !voiceControls.voice.value.joined))"
+            @volume="setTargetVolume" @toggle="toggleTargetMute"
+          />
 
           <div v-if="participants.length === 0 && shares.length === 0 && !localStream" class="empty-stage">
             <p class="eyebrow">Nenhuma transmissão</p>
@@ -512,7 +551,10 @@ onMounted(() => {
               v-for="participant in participants"
               :key="participant.identity"
               class="participant-tile"
+              tabindex="0" aria-haspopup="dialog" :aria-label="`Opções de áudio de ${participant.name}`"
               :class="{ speaking: voiceControls.speaking.value[participant.isLocal ? 'local' : participant.identity], hidden: focusedShareKey }"
+              @contextmenu="openAudioMenu($event, participant.isLocal ? 'local' : 'participant', participant.identity, participant.isLocal ? 'Seu microfone' : participant.name)"
+              @keydown.shift.f10.prevent="openAudioMenu($event, participant.isLocal ? 'local' : 'participant', participant.identity, participant.isLocal ? 'Seu microfone' : participant.name)"
             >
               <img class="participant-avatar" :src="avatarUrl(participant.name)" :alt="`Avatar de ${participant.name}`" />
               <strong>{{ participant.name }}{{ participant.isLocal ? ' · Você' : '' }}</strong>
@@ -522,7 +564,7 @@ onMounted(() => {
               <span v-if="!participant.isLocal" class="participant-connection" :class="participantConnection(participant)" :data-tooltip="`${connectionLabel(participantConnection(participant))}${pingMs === null ? '' : ` · Ping da sala: ${pingMs} ms`}`" :aria-label="`${connectionLabel(participantConnection(participant))}${pingMs === null ? '' : `, ping da sala ${pingMs} milissegundos`}`">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.5a14 14 0 0 1 18 0M6.5 9.5a9 9 0 0 1 11 0M10 13.5a4 4 0 0 1 4 0M12 18h.01" /></svg>
               </span>
-              <small>{{ participantConnection(participant) === 'reconnecting' ? 'Reconectando…' : voiceControls.speaking.value[participant.isLocal ? 'local' : participant.identity] ? 'Falando' : 'Na conversa' }}</small>
+              <small>{{ participantLevels[participant.identity]?.muted ? 'Silenciado para você' : participantConnection(participant) === 'reconnecting' ? 'Reconectando…' : voiceControls.speaking.value[participant.isLocal ? 'local' : participant.identity] ? 'Falando' : 'Na conversa' }}</small>
             </article>
             <article v-if="localStream" class="media-tile local" :class="{ hidden: focusedShareKey && focusedShareKey !== 'local', focused: focusedShareKey === 'local' }" role="button" tabindex="0" aria-label="Focar sua tela" @click="focusShare('local')" @keydown.enter.prevent="focusShare('local')" @keydown.space.prevent="focusShare('local')">
               <video ref="localPreview" autoplay playsinline muted :srcObject="localStream" aria-label="Prévia da sua tela" />
@@ -533,11 +575,17 @@ onMounted(() => {
               :key="share.key"
               :share="share"
               :deafened="voiceControls.voice.value.deafened"
+              :volume="voiceControls.outputVolume.value"
+              :level="shareLevels[share.key]"
+              :output-device-id="voiceControls.outputDeviceId.value"
               :focused="focusedShareKey === share.key"
               :placeholder="frozenFrames[share.key]"
               :class="{ hidden: focusedShareKey && focusedShareKey !== share.key }"
               @focus="focusShare(share.key)"
               @frame="freezeShare(share.key, $event)"
+              @audio-error="notify($event, 'error')"
+              @contextmenu="openAudioMenu($event, 'share', share.key, `Transmissão de ${share.participantName}`)"
+              @keydown.shift.f10.prevent="openAudioMenu($event, 'share', share.key, `Transmissão de ${share.participantName}`)"
             />
           </div>
           <button class="toolbar-icon fullscreen-control" :class="{ hidden: !controlsVisible }" :data-tooltip="fullscreen ? 'Sair do fullscreen' : 'Abrir em fullscreen'" :aria-label="fullscreen ? 'Sair do fullscreen' : 'Abrir em fullscreen'" @click.stop="toggleFullscreen">
@@ -548,6 +596,11 @@ onMounted(() => {
               :focused="Boolean(focusedShareKey)"
               :voice="voiceControls.voice.value" :voice-busy="voiceControls.busy.value" :share-state="shareState"
               :connected="roomState === 'connected'" :chat-open="chatOpen" :unread="chat.unread"
+              :microphone-volume="voiceControls.microphoneVolume.value" :output-volume="voiceControls.outputVolume.value"
+              :input-device-id="voiceControls.inputDeviceId.value" :output-device-id="voiceControls.outputDeviceId.value"
+              :input-devices="voiceControls.inputDevices.value" :output-devices="voiceControls.outputDevices.value" :output-selection-supported="voiceControls.outputSelectionSupported"
+              @devices="voiceControls.refreshDevices" @input-device="voiceControls.setInputDevice" @output-device="voiceControls.setOutputDevice"
+              @microphone-volume="voiceControls.setMicrophoneVolume" @output-volume="voiceControls.outputVolume.value = $event"
               @microphone="voiceControls.toggleMicrophone" @deafen="voiceControls.toggleDeafen" @share="openPicker"
               @stop-share="stopSharing" @chat="toggleChat" @leave="leaveRoom" @grid="focusShare('')"
             />

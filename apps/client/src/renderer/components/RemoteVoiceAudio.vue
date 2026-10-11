@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { RemoteVoiceTrack } from '../services/cloudflare/types'
-const props = defineProps<{ voices: RemoteVoiceTrack[]; deafened: boolean }>()
+import { playbackLevel, type AudioLevel } from '../services/audio-level'
+const props = defineProps<{ voices: RemoteVoiceTrack[]; deafened: boolean; volume: number; levels: Record<string, AudioLevel>; outputDeviceId: string }>()
+const emit = defineEmits<{ audioError: [message: string] }>()
 const blocked = ref(false)
 const elements = new Map<string, { audio: HTMLAudioElement; track: MediaStreamTrack }>()
 async function play(): Promise<void> {
@@ -16,16 +18,34 @@ function attach(): void {
   for (const voice of props.voices) {
     if (!elements.has(voice.key)) {
       const audio = new Audio()
-      audio.autoplay = true; audio.muted = props.deafened
+      audio.autoplay = true
       audio.srcObject = new MediaStream([voice.track])
+      void applyDevice(audio)
       elements.set(voice.key, { audio, track: voice.track })
     }
   }
+  applyLevels()
   void play()
 }
+async function applyDevice(audio: HTMLAudioElement): Promise<void> {
+  if (typeof audio.setSinkId !== 'function') return
+  try { await audio.setSinkId(props.outputDeviceId) }
+  catch { emit('audioError', 'Não foi possível usar a saída de áudio selecionada para a conversa.') }
+}
+function applyLevels(): void {
+  for (const voice of props.voices) {
+    const entry = elements.get(voice.key)
+    if (!entry) continue
+    const level = playbackLevel(props.volume, props.deafened, props.levels[voice.participantIdentity])
+    entry.audio.volume = level.volume
+    entry.audio.muted = level.muted
+  }
+}
 watch(() => props.voices, attach)
+watch(() => props.outputDeviceId, () => { elements.forEach(({ audio }) => { void applyDevice(audio) }) })
+watch([() => props.volume, () => props.levels], applyLevels, { deep: true })
 watch(() => props.deafened, (deafened) => {
-  elements.forEach(({ audio }) => { audio.muted = deafened })
+  applyLevels()
   if (!deafened) void play()
 })
 onMounted(attach)
