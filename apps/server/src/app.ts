@@ -87,13 +87,20 @@ export async function buildApp(
   }
   async function closeSession(member: Participant): Promise<void> {
     const sessionId = member.sessionId
+    const channelId = member.transportChannelId
     const tracks = [...member.mids].map((mid) => ({ mid }))
     member.sessionId = undefined
+    member.transportChannelId = undefined
     member.mids.clear()
     member.published.clear()
     if (sessionId && tracks.length) {
       await sfu.request(sessionId, 'tracks/close', { tracks, force: true }).catch((error: unknown) => {
         app.log.warn({ event: 'sfu.cleanup.failed', err: error })
+      })
+    }
+    if (sessionId && channelId !== undefined) {
+      await sfu.request(sessionId, 'datachannels/close', { dataChannels: [{ id: channelId }] }).catch((error: unknown) => {
+        app.log.warn({ event: 'sfu.transport.cleanup.failed', err: error })
       })
     }
   }
@@ -154,6 +161,17 @@ export async function buildApp(
     member.sessionId = result.sessionId
     return { sessionId: result.sessionId }
   }))
+  // Establish RTC without requesting microphone or screen capture permission.
+  app.post('/v1/media/prepare', authenticated, (request) => exclusive(request, async (member) => {
+    if (member.transportChannelId !== undefined) fail(409, 'Media transport already prepared.')
+    const result = await sfu.request(session(member), 'datachannels/establish', {
+      dataChannel: { location: 'remote', dataChannelName: 'server-events' },
+    })
+    if (Number.isInteger(result.dataChannel?.id) && !result.dataChannel?.errorCode) {
+      member.transportChannelId = result.dataChannel!.id
+    }
+    return result
+  }))
   app.post('/v1/tracks', authenticated, (request) => exclusive(request, async (member) => {
     const body = request.body
     if (!record(body) || !Array.isArray(body.tracks) || body.tracks.length < 1 || body.tracks.length > 32) fail(400, 'Invalid tracks.')
@@ -206,8 +224,12 @@ export async function buildApp(
     const body = request.body
     if (!record(body) || !Array.isArray(body.mids) || body.mids.length < 1 || body.mids.length > 64 ||
       !body.mids.every((mid) => identifier(mid) && member.mids.has(mid))) fail(400, 'Invalid track mids.')
+    if (body.sessionDescription !== undefined && (!description(body.sessionDescription) || body.sessionDescription.type !== 'offer')) {
+      fail(400, 'An SDP offer is required for negotiated closure.')
+    }
     const result = await sfu.request(session(member), 'tracks/close', {
-      tracks: body.mids.map((mid) => ({ mid })), force: true,
+      tracks: body.mids.map((mid) => ({ mid })),
+      ...(body.sessionDescription ? { sessionDescription: body.sessionDescription, force: false } : { force: true }),
     })
     for (const mid of body.mids) {
       if (result.tracks?.some((t) => t.mid === mid && t.errorCode)) continue

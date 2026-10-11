@@ -107,7 +107,7 @@ watch(shareNotice, (message) => {
   if (message) { notify(message); shareNotice.value = '' }
 })
 watch(voiceControls.notice, (message) => {
-  if (message) { notify(message); voiceControls.notice.value = '' }
+  if (message) { notify(message, 'error'); voiceControls.notice.value = '' }
 })
 
 roomService.onSnapshot((snapshot) => {
@@ -115,6 +115,8 @@ roomService.onSnapshot((snapshot) => {
   else presenceSounds.reset()
   participants.value = snapshot.participants
   shares.value = snapshot.shares
+  const shareKeys = new Set(snapshot.shares.map((share) => share.key))
+  frozenFrames.value = Object.fromEntries(Object.entries(frozenFrames.value).filter(([key]) => shareKeys.has(key)))
   voiceControls.remoteTracks.value = snapshot.remoteVoiceTracks
   if (focusedShareKey.value && focusedShareKey.value !== 'local' && !snapshot.shares.some((share) => share.key === focusedShareKey.value)) {
     focusedShareKey.value = ''
@@ -232,17 +234,12 @@ function connectionLabel(state: 'connected' | 'reconnecting' | 'disconnected'): 
 }
 
 function focusShare(key: string): void {
-  const previousKey = focusedShareKey.value
-  if (previousKey === key) return
-  const nextKey = key
-  if (previousKey && previousKey !== nextKey && previousKey !== 'local') void roomService.pauseShare(previousKey)
-  focusedShareKey.value = nextKey
-  if (nextKey && nextKey !== 'local') void roomService.resumeShare(nextKey)
+  focusedShareKey.value = focusedShareKey.value === key ? '' : key
+  wakeControls()
 }
 
 function freezeShare(shareKey: string, dataUrl: string): void {
   if (!frozenFrames.value[shareKey]) frozenFrames.value = { ...frozenFrames.value, [shareKey]: dataUrl }
-  if (focusedShareKey.value !== shareKey) void roomService.pauseShare(shareKey)
 }
 
 function wakeControls(): void {

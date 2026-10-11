@@ -70,7 +70,7 @@ onBeforeUnmount(detach)
     :class="{ focused, 'has-placeholder': Boolean(placeholder && !share.videoTrack) }"
     role="button"
     tabindex="0"
-    :aria-label="`Focar tela de ${share.participantName}`"
+    :aria-label="focused ? 'Voltar para a grade' : `Focar tela de ${share.participantName}`"
     @click="emit('focus')"
     @keydown.enter.prevent="emit('focus')"
     @keydown.space.prevent="emit('focus')"

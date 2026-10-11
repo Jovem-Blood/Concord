@@ -7,7 +7,7 @@ export type Participant = {
   identity: string; name: string; roomCode: string; expiresAt: number
   credentials: Credentials; pendingCredentials?: Credentials; tokens: Set<string>
   socketId?: string; joined: boolean; recoveryUntil: number; ready: boolean
-  sessionId?: string; published: Map<string, Publication>; mids: Set<string>; busy: boolean
+  sessionId?: string; transportChannelId?: number; published: Map<string, Publication>; mids: Set<string>; busy: boolean
   chatSentAt: number[]; typingAt: number; typingUntil: number
   sequenceConversation: string; highWater: number
 }

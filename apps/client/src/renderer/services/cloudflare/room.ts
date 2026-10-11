@@ -21,6 +21,7 @@ const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.cloudflare.com:3478' }]
 export class CloudflareRoomService {
   private credentials: JoinResponse | null = null
   private pc: RTCPeerConnection | null = null
+  private transportChannel: RTCDataChannel | null = null
   private controller = new AbortController()
   private generation = 0
   private queue: Promise<unknown> = Promise.resolve()
@@ -115,8 +116,7 @@ export class CloudflareRoomService {
         stream.getTracks().forEach((track) => track.stop())
         this.disposePeer()
         // Restore another active source, but never retry the failed capture itself.
-        if (this.microphone?.readyState === 'live') this.signalReconnecting()
-        else this.connection('connected')
+        this.signalReconnecting()
         logClient('error', 'screen.publish.failed', { error, code: 'TRACK_PUBLISH_FAILED' })
         throw new AppError('TRACK_PUBLISH_FAILED', 'A captura iniciou, mas não pôde ser transmitida.', { cause: error })
       }
@@ -145,8 +145,7 @@ export class CloudflareRoomService {
         this.microphone = null
         track.stop()
         this.disposePeer()
-        if (this.localStream?.getVideoTracks().some((t) => t.readyState === 'live')) this.signalReconnecting()
-        else this.connection('connected')
+        this.signalReconnecting()
         logClient('error', 'microphone.publish.failed', { error, code: 'TRACK_PUBLISH_FAILED' })
         throw new AppError('TRACK_PUBLISH_FAILED', 'Não foi possível transmitir o microfone. Tente novamente.', { cause: error })
       }
@@ -214,15 +213,25 @@ export class CloudflareRoomService {
 
   private async ensurePeer(): Promise<RTCPeerConnection> {
     if (this.pc) return this.pc
-    await this.api('session')
-    const ice = await this.api<{ iceServers?: RTCIceServer[] }>('ice-servers')
+    const [, ice] = await Promise.all([this.api('session'), this.api<{ iceServers?: RTCIceServer[] }>('ice-servers')])
     if (ice.iceServers?.length) this.iceServers = ice.iceServers
     const pc = new RTCPeerConnection({ iceServers: this.iceServers, bundlePolicy: 'max-bundle' })
     this.pc = pc
     this.needsReset = false
+    pc.ondatachannel = (event) => {
+      if (this.pc !== pc) { event.channel.close(); return }
+      this.transportChannel = event.channel
+    }
     pc.ontrack = (event) => {
       if (this.pc !== pc) return
-      event.track.onended = () => this.emitSnapshot()
+      event.track.onended = () => {
+        if (this.pc !== pc) return
+        this.emitSnapshot()
+        if ([...this.subscriptions.values()].some((subscription) => subscription.mid === event.transceiver.mid &&
+          this.presence.tracks.some((source) => trackKey(source) === trackKey(subscription.source)))) {
+          this.signalReconnecting()
+        }
+      }
       this.emitSnapshot()
     }
     pc.onconnectionstatechange = () => {
@@ -239,6 +248,17 @@ export class CloudflareRoomService {
         this.disconnectedAt ||= Date.now()
         this.signalReconnecting(true, new Error('WebRTC failed'))
       }
+    }
+    try {
+      const result = await this.api<SfuResponse>('media/prepare')
+      if (!Number.isInteger(result.dataChannel?.id) || result.dataChannel?.errorCode || !result.sessionDescription) {
+        throw new Error('Incomplete media transport response')
+      }
+      await this.negotiate(result, pc)
+      await this.waitConnected(pc)
+    } catch (error) {
+      this.needsReset = true
+      throw error
     }
     return pc
   }
@@ -313,17 +333,33 @@ export class CloudflareRoomService {
   private async unpublish(sources: MediaSource[]): Promise<void> {
     const transceivers = sources.flatMap((source) => {
       const transceiver = this.localTransceivers.get(source)
-      this.localTransceivers.delete(source)
       return transceiver ? [transceiver] : []
     })
-    for (const transceiver of transceivers) {
-      await transceiver.sender.replaceTrack(null).catch(() => undefined)
-      transceiver.stop()
-    }
+    await this.closeTransceivers(transceivers)
+    sources.forEach((source) => this.localTransceivers.delete(source))
+  }
+
+  private async closeTransceivers(transceivers: RTCRtpTransceiver[]): Promise<void> {
+    if (!transceivers.length || !this.pc || !this.credentials) return
+    const pc = this.pc
     const mids = transceivers.map((t) => t.mid).filter((mid): mid is string => mid !== null)
-    if (mids.length && this.credentials) {
-      const result = await this.api<SfuResponse>('tracks/close', { mids })
-      if (result.tracks?.some((t) => t.errorCode)) throw new Error('Could not close published tracks')
+    try {
+      for (const transceiver of transceivers) {
+        await transceiver.sender.replaceTrack(null)
+        transceiver.stop()
+      }
+      if (!mids.length) return
+      // Retire m-lines on both sides. Forced SFU closure alone leaves SDP out of sync.
+      await pc.setLocalDescription(await pc.createOffer())
+      await waitForIceGathering(pc, this.controller.signal)
+      const result = await this.api<SfuResponse>('tracks/close', { mids, sessionDescription: pc.localDescription!.toJSON() })
+      // Even a partial closure can return a valid answer that must be applied.
+      await this.negotiate({ ...result, tracks: undefined }, pc)
+      if (!result.sessionDescription) throw new Error('Missing track closure answer')
+      if (result.tracks?.some((track) => track.errorCode)) throw new Error('Could not close tracks')
+    } catch (error) {
+      this.needsReset = true
+      throw error
     }
   }
 
@@ -337,17 +373,18 @@ export class CloudflareRoomService {
       await this.ensurePeer()
       await this.publish()
     }
+    // Warm the transport as soon as room signaling is ready, even for a muted viewer.
+    await this.ensurePeer()
     const wanted = this.presence.tracks.filter((t) => t.participantIdentity !== this.credentials!.identity &&
       (t.source === 'microphone' || !this.pausedShares.has(`${t.participantIdentity}:${t.sessionId}`)))
     const keys = new Set(wanted.map(trackKey))
     const removed = [...this.subscriptions.entries()].filter(([key]) => !keys.has(key))
     if (removed.length) {
-      const result = await this.api<SfuResponse>('tracks/close', { mids: removed.map(([, t]) => t.mid) })
-      if (result.tracks?.some((t) => t.errorCode)) throw new Error('Could not close subscriptions')
+      await this.closeTransceivers(removed.flatMap(([, subscription]) =>
+        this.pc?.getTransceivers().filter((t) => t.mid === subscription.mid) ?? []))
       for (const [key, subscription] of removed) {
         const transceiver = this.pc?.getTransceivers().find((t) => t.mid === subscription.mid)
         transceiver?.receiver.track.stop()
-        transceiver?.stop()
         this.subscriptions.delete(key)
       }
       this.emitSnapshot()
@@ -370,9 +407,10 @@ export class CloudflareRoomService {
         await this.waitConnected(pc)
         this.emitSnapshot()
       } catch (error) {
-        // A tracks/new request or SDP exchange may have partially changed either side.
-        // Recreate the session on the next pass rather than layering another offer on it.
-        this.needsReset = true
+        // A publication can disappear between discovery and this request. The server
+        // rejects it before touching SDP, so keep unrelated media and retry discovery.
+        // Other failures may partially change SDP and require a fresh session.
+        if (!(error instanceof SignalingError && error.status === 403)) this.needsReset = true
         throw error
       }
     }
@@ -385,12 +423,11 @@ export class CloudflareRoomService {
         subscription.source.source !== 'microphone' &&
         `${subscription.source.participantIdentity}:${subscription.source.sessionId}` === shareKey)
       if (!removed.length || !this.credentials) return
-      const result = await this.api<SfuResponse>('tracks/close', { mids: removed.map(([, subscription]) => subscription.mid) })
-      if (result.tracks?.some((track) => track.errorCode)) throw new Error('Could not close share subscriptions')
+      await this.closeTransceivers(removed.flatMap(([, subscription]) =>
+        this.pc?.getTransceivers().filter((t) => t.mid === subscription.mid) ?? []))
       for (const [key, subscription] of removed) {
         const transceiver = this.pc?.getTransceivers().find((item) => item.mid === subscription.mid)
         transceiver?.receiver.track.stop()
-        transceiver?.stop()
         this.subscriptions.delete(key)
       }
       this.emitSnapshot()
@@ -453,8 +490,11 @@ export class CloudflareRoomService {
   private disposePeer(): void {
     const pc = this.pc
     this.pc = null
+    this.transportChannel?.close()
+    this.transportChannel = null
     if (pc) {
       pc.ontrack = null
+      pc.ondatachannel = null
       pc.onconnectionstatechange = null
       pc.close()
     }
@@ -462,6 +502,7 @@ export class CloudflareRoomService {
     this.subscriptions.clear()
     this.needsReset = false
     this.disconnectedAt = 0
+    this.emitSnapshot()
   }
 
   private signalReconnecting(resetPeer = true, error?: unknown): void {
@@ -482,6 +523,7 @@ export class CloudflareRoomService {
       })
     }
     for (const { source, mid } of this.subscriptions.values()) {
+      if (!this.presence.tracks.some((track) => trackKey(track) === trackKey(source))) continue
       const track = this.pc?.getTransceivers().find((t) => t.mid === mid)?.receiver.track
       if (!track || track.readyState === 'ended') continue
       if (source.source === 'microphone') {

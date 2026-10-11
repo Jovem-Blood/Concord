@@ -9,6 +9,11 @@ import { startAutoUpdates } from './updater'
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined
 declare const MAIN_WINDOW_VITE_NAME: string
 
+// Keep shared media at its original volume while a communications stream is active.
+// Chromium otherwise ducks playback (and other Windows applications) during calls.
+const disabledFeatures = app.commandLine.getSwitchValue('disable-features').split(',').filter(Boolean)
+app.commandLine.appendSwitch('disable-features', [...new Set([...disabledFeatures, 'AudioDucking', 'AudioDuckingWin'])].join(','))
+
 let mainWindow: BrowserWindow | null = null
 let disposeCaptureHandlers: (() => void) | null = null
 let disposeClipboardHandlers: (() => void) | null = null

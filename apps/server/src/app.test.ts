@@ -24,8 +24,8 @@ async function fixture() {
       const dataChannels = (body as { dataChannels?: { location: 'local' | 'remote'; sessionId?: string; dataChannelName: string }[] }).dataChannels
       return { tracks: tracks?.map((t, i) => ({ ...t, mid: t.mid ?? `remote-${i}` })),
         dataChannels: dataChannels?.map((channel, i) => ({ ...channel, id: i + 1 })),
-        ...(operation === 'datachannels/establish' ? { dataChannel: { id: 0 }, sessionDescription: { type: 'answer' as const, sdp: 'answer-sdp' } } : {}),
-        ...(operation === 'tracks/new' ? { sessionDescription: { type: 'answer' as const, sdp: 'answer-sdp' } } : {}) }
+        ...(operation === 'datachannels/establish' ? { dataChannel: { id: 0 }, requiresImmediateRenegotiation: true, sessionDescription: { type: 'offer' as const, sdp: 'offer-sdp' } } : {}),
+        ...(operation === 'tracks/new' || operation === 'tracks/close' ? { sessionDescription: { type: 'answer' as const, sdp: 'answer-sdp' } } : {}) }
     }),
   }
   const app = await buildApp(config, sfu)
@@ -64,6 +64,33 @@ async function fixture() {
 }
 
 describe('Cloudflare room signaling', () => {
+  it('prepares authenticated RTC without publishing media and closes the transport on leave', async () => {
+    const { app, join, sfu, room } = await fixture()
+    const participant = await join()
+    expect((await app.inject({ method: 'POST', url: '/v1/media/prepare' })).statusCode).toBe(401)
+    await app.inject({ method: 'POST', url: '/v1/session', headers: participant.headers })
+    const prepared = await app.inject({ method: 'POST', url: '/v1/media/prepare', headers: participant.headers })
+    expect(prepared.statusCode).toBe(200)
+    expect(prepared.json()).toMatchObject({ dataChannel: { id: 0 }, sessionDescription: { type: 'offer' } })
+    expect(sfu.request).toHaveBeenLastCalledWith('session-1', 'datachannels/establish', { dataChannel: { location: 'remote', dataChannelName: 'server-events' } })
+    expect((await room(participant.headers)).json().tracks).toEqual([])
+    expect((await app.inject({ method: 'POST', url: '/v1/media/prepare', headers: participant.headers })).statusCode).toBe(409)
+    await app.inject({ method: 'POST', url: '/v1/leave', headers: participant.headers })
+    expect(sfu.request).toHaveBeenCalledWith('session-1', 'datachannels/close', { dataChannels: [{ id: 0 }] })
+  })
+  it('forwards a track closure offer and preserves SDP negotiation instead of forcing closure', async () => {
+    const { app, join, publish, sfu, room } = await fixture()
+    const participant = await join()
+    await publish(participant.headers)
+    const payload = { mids: ['0'], sessionDescription: { type: 'offer', sdp: 'close-offer' } }
+    expect((await app.inject({ method: 'POST', url: '/v1/tracks/close', headers: participant.headers,
+      payload: { ...payload, sessionDescription: { type: 'answer', sdp: 'invalid' } } })).statusCode).toBe(400)
+    const closed = await app.inject({ method: 'POST', url: '/v1/tracks/close', headers: participant.headers, payload })
+    expect(closed.statusCode).toBe(200)
+    expect(sfu.request).toHaveBeenLastCalledWith('session-1', 'tracks/close', { tracks: [{ mid: '0' }], sessionDescription: payload.sessionDescription, force: false })
+    expect(closed.json().sessionDescription.type).toBe('answer')
+    expect((await room(participant.headers)).json().tracks).toEqual([])
+  })
   it('shares bounded room history with late joiners and removes it only when the room empties', async () => {
     const { app, join } = await fixture()
     const alice = await join('ABCD2345', 'Alice')
