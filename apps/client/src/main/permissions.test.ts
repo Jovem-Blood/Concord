@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { displayCapturePermission, microphonePermission, trustedRendererUrl } from './permissions'
+import { audioOutputPermission, displayCapturePermission, microphonePermission, trustedRendererUrl } from './permissions'
 describe('desktop microphone permission', () => {
   const renderer = 'file:///C:/Concord/app/index.html'
   it('accepts only the exact renderer main frame and audio-only requests', () => {
@@ -9,6 +9,17 @@ describe('desktop microphone permission', () => {
     expect(microphonePermission('media', true, renderer, renderer, ['audio', 'video'])).toBe(false)
     expect(microphonePermission('media', false, renderer, renderer, ['audio'])).toBe(false)
     expect(microphonePermission('media', true, 'https://evil.test/', renderer, ['audio'])).toBe(false)
+  })
+})
+
+describe('desktop audio output permission', () => {
+  const renderer = 'file:///C:/Concord/app/index.html'
+  it('allows output selection only for the exact renderer main frame', () => {
+    expect(audioOutputPermission('speaker-selection', true, renderer, renderer)).toBe(true)
+    expect(audioOutputPermission('speaker-selection', false, renderer, renderer)).toBe(false)
+    expect(audioOutputPermission('speaker-selection', true, 'https://evil.test/', renderer)).toBe(false)
+    expect(audioOutputPermission('speaker-selection', true, `${renderer}.evil`, renderer)).toBe(false)
+    expect(audioOutputPermission('media', true, renderer, renderer)).toBe(false)
   })
 })
 

@@ -12,6 +12,11 @@ export function microphonePermission(permission: string, mainFrame: boolean, url
     mediaTypes.length === 1 && mediaTypes[0] === 'audio'
 }
 
+export function audioOutputPermission(permission: string, mainFrame: boolean, url: string,
+  rendererUrl: string): boolean {
+  return permission === 'speaker-selection' && mainFrame && trustedRendererUrl(url, rendererUrl)
+}
+
 export function displayCapturePermission(permission: string, mainFrame: boolean, url: string,
   rendererUrl: string, mediaTypes: readonly string[], hasSelection: boolean): boolean {
   // Electron 44 reports display capture as `media` with no camera/microphone types.

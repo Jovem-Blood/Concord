@@ -3,7 +3,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { hasPendingCaptureSelection, registerCaptureHandlers } from './capture'
 import { registerClipboardHandlers } from './clipboard'
-import { displayCapturePermission, microphonePermission, trustedRendererUrl } from './permissions'
+import { audioOutputPermission, displayCapturePermission, microphonePermission, trustedRendererUrl } from './permissions'
 import { startAutoUpdates } from './updater'
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined
@@ -57,14 +57,16 @@ function createMainWindow(): void {
     const mediaTypes = 'mediaTypes' in details ? details.mediaTypes ?? [] : []
     callback(webContents === mainWindow?.webContents && (
       microphonePermission(permission, details.isMainFrame, details.requestingUrl, rendererUrl(), mediaTypes) ||
+      audioOutputPermission(permission, details.isMainFrame, details.requestingUrl, rendererUrl()) ||
       displayCapturePermission(permission, details.isMainFrame, details.requestingUrl, rendererUrl(),
         mediaTypes, mainWindow !== null && hasPendingCaptureSelection(mainWindow))
     ))
   })
 
   appSession.setPermissionCheckHandler((webContents, permission, _origin, details) =>
-    webContents === mainWindow?.webContents && microphonePermission(permission,
-      details.isMainFrame, details.requestingUrl ?? '', rendererUrl(), [details.mediaType ?? 'unknown']))
+    webContents === mainWindow?.webContents && (microphonePermission(permission,
+      details.isMainFrame, details.requestingUrl ?? '', rendererUrl(), [details.mediaType ?? 'unknown']) ||
+      audioOutputPermission(permission, details.isMainFrame, details.requestingUrl ?? '', rendererUrl())))
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   mainWindow.webContents.on('will-navigate', (event, url) => {
