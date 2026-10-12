@@ -55,7 +55,11 @@ try {
     return Boolean(result.data?.result?.length)
   }, 'Client error log')
   const dashboard = await get('/api/dashboards/uid/concord-overview')
-  if (dashboard.dashboard?.panels?.length !== 6) throw new Error('Dashboard provisioning failed')
+  const expectedPanels = ['Última telemetria recebida', 'Uptime da API', 'Requisições HTTP/s', 'Taxa HTTP 5xx',
+    'Taxa de falhas por operação', 'Latência HTTP p95 por rota', 'Requisições HTTP/s por rota']
+  if (!expectedPanels.every((title) => dashboard.dashboard?.panels?.some((panel) => panel.title === title))) {
+    throw new Error('Dashboard provisioning failed')
+  }
   for (const panel of dashboard.dashboard.panels) {
     const path = panel.type === 'logs' ? '/api/datasources/proxy/uid/concord-loki/loki/api/v1/query_range?query=' :
       '/api/datasources/proxy/uid/concord-prometheus/api/v1/query?query='

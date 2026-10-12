@@ -30,6 +30,14 @@ docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d -
 
 Open `http://localhost:3000`, sign in as `admin` with your password, then open **Dashboards → Concord → Concord — Operações e erros**. In **Explore**, select Concord Traces or Concord Logs. Logs and traces are linked by trace ID.
 
+To expose Grafana through an existing Traefik instance, set `GRAFANA_HOST` and `TRAEFIK_NETWORK`, then include the optional override:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.observability.yml -f docker-compose.traefik.yml up -d --build
+```
+
+The Traefik network must already exist. The override enables TLS on the `websecure` entrypoint with the `cloudflare` certificate resolver and keeps Grafana attached to the internal Concord network as well.
+
 The override adds Grafana, monolithic Tempo, Loki, Alloy and Prometheus. Neither Kafka nor Mimir is required. Grafana and OTLP host ports bind only to loopback; use your authenticated proxy or SSH tunnel for remote access. `GRAFANA_PORT`, `OTLP_HTTP_PORT` and `OTLP_GRPC_PORT` change host ports. Concord sends to Alloy on the Compose network. Leave signal-specific endpoints unset with this reference.
 
 Named volumes persist data. Trace blocks and logs have 72-hour retention; metrics have 15-day retention and a 1 GB size limit. Container memory and Docker logs are bounded. This is a small single-host reference: tune memory, disk, retention and backups for your usage. Tempo/Loki retention limits age, not maximum disk usage. Image versions are pinned and should be updated deliberately.

@@ -1,0 +1,23 @@
+# Optional Traefik override. Use together with the base and observability files.
+services:
+  grafana:
+    environment:
+      GF_SERVER_DOMAIN: ${GRAFANA_HOST:?Set GRAFANA_HOST in .env}
+      GF_SERVER_ROOT_URL: https://${GRAFANA_HOST:?Set GRAFANA_HOST in .env}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:?Set TRAEFIK_NETWORK in .env}"
+      - "traefik.http.routers.concord-grafana.rule=Host(`${GRAFANA_HOST:?Set GRAFANA_HOST in .env}`)"
+      - "traefik.http.routers.concord-grafana.entrypoints=websecure"
+      - "traefik.http.routers.concord-grafana.tls=true"
+      - "traefik.http.routers.concord-grafana.tls.certresolver=cloudflare"
+      - "traefik.http.routers.concord-grafana.service=concord-grafana"
+      - "traefik.http.services.concord-grafana.loadbalancer.server.port=3000"
+    networks:
+      - default
+      - traefik
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:?Set TRAEFIK_NETWORK in .env}
