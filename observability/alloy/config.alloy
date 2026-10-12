@@ -1,0 +1,46 @@
+otelcol.receiver.otlp "concord" {
+  http { endpoint = "0.0.0.0:4318" }
+  grpc { endpoint = "0.0.0.0:4317" }
+  output {
+    traces  = [otelcol.processor.memory_limiter.concord.input]
+    logs    = [otelcol.processor.memory_limiter.concord.input]
+    metrics = [otelcol.processor.memory_limiter.concord.input]
+  }
+}
+
+otelcol.processor.memory_limiter "concord" {
+  check_interval = "1s"
+  limit = "192MiB"
+  output {
+    traces  = [otelcol.processor.batch.concord.input]
+    logs    = [otelcol.processor.batch.concord.input]
+    metrics = [otelcol.processor.batch.concord.input]
+  }
+}
+
+otelcol.processor.batch "concord" {
+  timeout = "1s"
+  send_batch_size = 128
+  send_batch_max_size = 256
+  output {
+    traces  = [otelcol.exporter.otlphttp.tempo.input]
+    logs    = [otelcol.exporter.otlphttp.loki.input]
+    metrics = [otelcol.exporter.prometheus.concord.input]
+  }
+}
+
+otelcol.exporter.otlphttp "tempo" {
+  client { endpoint = "http://tempo:4318" }
+}
+
+otelcol.exporter.otlphttp "loki" {
+  client { endpoint = "http://loki:3100/otlp" }
+}
+
+otelcol.exporter.prometheus "concord" {
+  forward_to = [prometheus.remote_write.concord.receiver]
+}
+
+prometheus.remote_write "concord" {
+  endpoint { url = "http://prometheus:9090/api/v1/write" }
+}

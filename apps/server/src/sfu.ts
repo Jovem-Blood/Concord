@@ -1,3 +1,12 @@
+import type { Telemetry } from './telemetry.js'
+
+export class UpstreamHttpError extends Error {
+  constructor(public readonly status: number, provider: 'SFU' | 'TURN') {
+    super(`Cloudflare ${provider} request failed (${status})`)
+    this.name = 'UpstreamHttpError'
+  }
+}
+
 export type SessionDescription = { type: 'offer' | 'answer'; sdp: string }
 export type SfuTrack = {
   location?: 'local' | 'remote'
@@ -26,6 +35,7 @@ export type SfuClient = {
 export function createSfuClient(
   config: { appId: string; appSecret: string },
   fetcher: typeof fetch = fetch,
+  telemetry?: Telemetry,
 ): SfuClient {
   const base = `https://rtc.live.cloudflare.com/v1/apps/${encodeURIComponent(config.appId)}`
   async function request(path: string, method: string, body?: unknown): Promise<SfuResponse> {
@@ -36,16 +46,17 @@ export function createSfuClient(
       signal: AbortSignal.timeout(15_000),
     })
     // Never include upstream bodies (SDP, credentials) in errors or logs.
-    if (!response.ok) throw new Error(`Cloudflare SFU request failed (${response.status})`)
+    if (!response.ok) throw new UpstreamHttpError(response.status, 'SFU')
     const result = await response.json() as SfuResponse & { errorCode?: string }
     if (!result || typeof result !== 'object' || result.errorCode) throw new Error('Cloudflare SFU operation failed')
     return result
   }
   return {
-    createSession: () => request('sessions/new', 'POST'),
-    request: (sessionId, operation, body) => request(
-      `sessions/${encodeURIComponent(sessionId)}/${operation}`,
-      operation.endsWith('/new') || operation.endsWith('/establish') ? 'POST' : 'PUT', body,
-    ),
+    createSession: () => telemetry ? telemetry.operation('sfu.sessions.new', () => request('sessions/new', 'POST')) : request('sessions/new', 'POST'),
+    request: (sessionId, operation, body) => {
+      const action = () => request(`sessions/${encodeURIComponent(sessionId)}/${operation}`,
+        operation.endsWith('/new') || operation.endsWith('/establish') ? 'POST' : 'PUT', body)
+      return telemetry ? telemetry.operation(`sfu.${operation.replaceAll('/', '.')}`, action) : action()
+    },
   }
 }

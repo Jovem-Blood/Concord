@@ -147,6 +147,8 @@ Run exactly one `server` instance: room presence, tokens, and publications are k
 | `LOG_LEVEL` | Server log threshold (`error`, `warn`, `info`, `debug`); defaults to `info` |
 | `VITE_LOG_LEVEL` | Client console threshold; defaults to `info` |
 
+OpenTelemetry export is optional and supports OTLP HTTP/protobuf, HTTP/JSON and gRPC destinations. Without a configured endpoint it stays disabled. A separate Grafana Compose reference includes traces, logs, metrics, a dashboard and alert rules. See [Optional observability](docs/observability.md) for setup, existing-backend integration and notification configuration.
+
 Server logs are structured JSON. The client reports errors, warnings, connection loss and recovery to `/v1/client-events`; a bounded in-memory queue retries reports after connectivity returns. Reports contain an ephemeral client ID, platform, event, severity and limited error classification. They do not include room codes, names, tokens, SDP or chat content. Events queued when the app closes are lost.
 
 Concord uses Cloudflare STUN by default. To support networks that require a TURN relay, set both `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_API_TOKEN` on the server; the API generates temporary ICE credentials for clients. Without this configuration, relay-dependent networks are unsupported. Web capture audio availability depends on the browser, operating system, and selected source; video continues with a warning when audio is unavailable.

@@ -104,7 +104,7 @@ export class RoomAuthority {
     if (!member.ready) throw new RoomError('NOT_READY')
     if (!record(input) || typeof input.id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(input.id) || !validContent(input.content) ||
       typeof input.conversation !== 'string' || !Number.isSafeInteger(input.clientSequence) || input.clientSequence < 1 ||
-      Object.keys(input).some((key) => !['id', 'content', 'conversation', 'clientSequence'].includes(key))) throw new RoomError('INVALID_REQUEST')
+      Object.keys(input).some((key) => !['id', 'content', 'conversation', 'clientSequence', 'traceparent'].includes(key))) throw new RoomError('INVALID_REQUEST')
     const chat = this.conversation(member.roomCode)
     if (input.conversation !== chat.id) throw new RoomError('CONVERSATION_RESET')
     this.pruneReceipts(chat)
@@ -121,7 +121,9 @@ export class RoomAuthority {
     if (member.chatSentAt.length >= 5) throw new RoomError('RATE_LIMITED', 429)
     member.chatSentAt.push(this.now())
     member.highWater = input.clientSequence
-    const message: Message = { ...input, type: 'text', senderId: member.identity, senderName: member.name, sentAt: this.now(), sequence: ++chat.cursor }
+    const message: Message = { id: input.id, content: input.content, conversation: input.conversation,
+      clientSequence: input.clientSequence, type: 'text', senderId: member.identity,
+      senderName: member.name, sentAt: this.now(), sequence: ++chat.cursor }
     chat.messages.push(message)
     if (chat.messages.length > MAX_MESSAGES) chat.messages.shift()
     chat.receipts.set(key, message)

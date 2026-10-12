@@ -2,7 +2,8 @@ import { AppError } from '../../../shared/errors'
 import type { CaptureResolution } from '../../../shared/capture'
 import { serverUrl, type JoinResponse } from '../server'
 import type { MediaSource, PublishedTrack, RemoteShareView, RemoteVoiceTrack, RoomPresence, RoomSnapshot, SfuResponse } from './types'
-import { logClient } from '../telemetry'
+import { logClient, startClientOperation, traceClientOperation, type ClientOperation } from '../telemetry'
+import type { ClientOperationName } from '@concord/protocol'
 import { waitForIceGathering } from './ice'
 
 type ConnectionState = 'connected' | 'reconnecting' | 'disconnected'
@@ -43,6 +44,16 @@ export class CloudflareRoomService {
   private connectionState: ConnectionState | null = null
   private pausedShares = new Set<string>()
   private iceServers: RTCIceServer[] = ICE_SERVERS
+  private operation?: ClientOperation
+
+  private async observe<T>(name: ClientOperationName, action: () => Promise<T>, parent = this.operation?.traceparent): Promise<T> {
+    const previous = this.operation
+    const operation = startClientOperation(name, parent)
+    this.operation = operation
+    try { const result = await action(); operation.end(); return result }
+    catch (error) { operation.end(error); throw error }
+    finally { this.operation = previous }
+  }
 
   private connection(state: ConnectionState, error?: unknown): void {
     if (this.connectionState !== state) {
@@ -101,7 +112,7 @@ export class CloudflareRoomService {
   }
 
   async publishScreen(stream: MediaStream, resolution: CaptureResolution): Promise<void> {
-    return this.enqueue(async () => {
+    return this.enqueue(() => this.observe('screen.publish', async () => {
       if (!this.credentials) throw new AppError('NETWORK_DISCONNECTED', 'Você não está conectado a uma sala.')
       if (!stream.getVideoTracks().some((t) => t.readyState === 'live')) {
         throw new AppError('CAPTURE_SOURCE_GONE', 'A fonte selecionada não está mais disponível.')
@@ -120,7 +131,7 @@ export class CloudflareRoomService {
         logClient('error', 'screen.publish.failed', { error, code: 'TRACK_PUBLISH_FAILED' })
         throw new AppError('TRACK_PUBLISH_FAILED', 'A captura iniciou, mas não pôde ser transmitida.', { cause: error })
       }
-    })
+    }))
   }
 
   unpublishScreen(): Promise<void> {
@@ -136,8 +147,8 @@ export class CloudflareRoomService {
     })
   }
 
-  publishMicrophone(track: MediaStreamTrack): Promise<void> {
-    return this.enqueue(async () => {
+  publishMicrophone(track: MediaStreamTrack, parent?: string): Promise<void> {
+    return this.enqueue(() => this.observe('microphone.publish', async () => {
       if (!this.credentials || track.kind !== 'audio' || track.readyState !== 'live') throw new Error('Microfone indisponível.')
       await this.unpublish(['microphone'])
       this.microphone = track
@@ -149,7 +160,7 @@ export class CloudflareRoomService {
         logClient('error', 'microphone.publish.failed', { error, code: 'TRACK_PUBLISH_FAILED' })
         throw new AppError('TRACK_PUBLISH_FAILED', 'Não foi possível transmitir o microfone. Tente novamente.', { cause: error })
       }
-    })
+    }, parent))
   }
   unpublishMicrophone(): Promise<void> {
     this.microphone?.stop()
@@ -193,26 +204,32 @@ export class CloudflareRoomService {
   }
 
   private async api<T>(path: string, body?: unknown): Promise<T> {
-    const credentials = this.credentials
-    const generation = this.generation
-    if (!credentials) throw new SignalingError(401)
-    const response = await fetch(`${serverUrl}/v1/${path}`, {
-      method: path === 'ice-servers' ? 'GET' : 'POST',
-      headers: {
-        authorization: `Bearer ${credentials.participantToken}`,
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      cache: 'no-store', signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(25_000)]),
-    })
-    if (!response.ok) throw new SignalingError(response.status)
-    const result = await response.json() as T
-    if (generation !== this.generation) throw new DOMException('Session changed', 'AbortError')
-    return result
+    return traceClientOperation('sfu.signal', async (operation) => {
+      const credentials = this.credentials
+      const generation = this.generation
+      if (!credentials) throw new SignalingError(401)
+      const response = await fetch(`${serverUrl}/v1/${path}`, {
+        method: path === 'ice-servers' ? 'GET' : 'POST',
+        headers: {
+          authorization: `Bearer ${credentials.participantToken}`,
+          ...(operation.traceparent ? { traceparent: operation.traceparent } : {}),
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        cache: 'no-store', signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(25_000)]),
+      })
+      if (!response.ok) throw new SignalingError(response.status)
+      const result = await response.json() as T
+      if (generation !== this.generation) throw new DOMException('Session changed', 'AbortError')
+      return result
+    }, this.operation?.traceparent)
   }
 
-  private async ensurePeer(): Promise<RTCPeerConnection> {
-    if (this.pc) return this.pc
+  private ensurePeer(): Promise<RTCPeerConnection> {
+    return this.pc ? Promise.resolve(this.pc) : this.observe('media.prepare', () => this.createPeer())
+  }
+
+  private async createPeer(): Promise<RTCPeerConnection> {
     const [, ice] = await Promise.all([this.api('session'), this.api<{ iceServers?: RTCIceServer[] }>('ice-servers')])
     if (ice.iceServers?.length) this.iceServers = ice.iceServers
     const pc = new RTCPeerConnection({ iceServers: this.iceServers, bundlePolicy: 'max-bundle' })
@@ -229,6 +246,7 @@ export class CloudflareRoomService {
         this.emitSnapshot()
         if ([...this.subscriptions.values()].some((subscription) => subscription.mid === event.transceiver.mid &&
           this.presence.tracks.some((source) => trackKey(source) === trackKey(subscription.source)))) {
+          logClient('warn', 'media.remote_track.ended')
           this.signalReconnecting()
         }
       }
@@ -240,11 +258,13 @@ export class CloudflareRoomService {
         this.disconnectedAt = 0
         this.connection('connected')
       } else if (pc.connectionState === 'disconnected') {
+        logClient('warn', 'media.connection.lost', { code: 'WEBRTC_DISCONNECTED' })
         this.disconnectedAt ||= Date.now()
         // ICE can report a short-lived disconnect while changing routes or recovering
         // packets. Keep the current tracks alive and only rebuild after the grace period.
         this.signalReconnecting(false, new Error('WebRTC disconnected'))
       } else if (pc.connectionState === 'failed') {
+        logClient('error', 'media.connection.failed', { code: 'WEBRTC_FAILED' })
         this.disconnectedAt ||= Date.now()
         this.signalReconnecting(true, new Error('WebRTC failed'))
       }
@@ -393,26 +413,28 @@ export class CloudflareRoomService {
     for (let offset = 0; offset < added.length; offset += 32) {
       const batch = added.slice(offset, offset + 32)
       const pc = await this.ensurePeer()
-      try {
-        const result = await this.api<SfuResponse>('tracks', {
-          tracks: batch.map((t) => ({ location: 'remote', sessionId: t.sessionId, trackName: t.trackName })),
-        })
-        // ontrack may fire during setRemoteDescription, so register mids before negotiation.
-        for (const track of result.tracks ?? []) {
-          const source = batch.find((t) => t.sessionId === track.sessionId && t.trackName === track.trackName)
-          if (source && track.mid && !track.errorCode) this.subscriptions.set(trackKey(source), { source, mid: track.mid })
+      await this.observe('media.subscribe', async () => {
+        try {
+          const result = await this.api<SfuResponse>('tracks', {
+            tracks: batch.map((t) => ({ location: 'remote', sessionId: t.sessionId, trackName: t.trackName })),
+          })
+          // ontrack may fire during setRemoteDescription, so register mids before negotiation.
+          for (const track of result.tracks ?? []) {
+            const source = batch.find((t) => t.sessionId === track.sessionId && t.trackName === track.trackName)
+            if (source && track.mid && !track.errorCode) this.subscriptions.set(trackKey(source), { source, mid: track.mid })
+          }
+          await this.negotiate(result, pc)
+          if (batch.some((t) => !this.subscriptions.has(trackKey(t)))) throw new Error('Incomplete subscription response')
+          await this.waitConnected(pc)
+          this.emitSnapshot()
+        } catch (error) {
+          // A publication can disappear between discovery and this request. The server
+          // rejects it before touching SDP, so keep unrelated media and retry discovery.
+          // Other failures may partially change SDP and require a fresh session.
+          if (!(error instanceof SignalingError && error.status === 403)) this.needsReset = true
+          throw error
         }
-        await this.negotiate(result, pc)
-        if (batch.some((t) => !this.subscriptions.has(trackKey(t)))) throw new Error('Incomplete subscription response')
-        await this.waitConnected(pc)
-        this.emitSnapshot()
-      } catch (error) {
-        // A publication can disappear between discovery and this request. The server
-        // rejects it before touching SDP, so keep unrelated media and retry discovery.
-        // Other failures may partially change SDP and require a fresh session.
-        if (!(error instanceof SignalingError && error.status === 403)) this.needsReset = true
-        throw error
-      }
+      })
     }
   }
 
@@ -439,7 +461,7 @@ export class CloudflareRoomService {
     if (!this.signalingAvailable || !this.credentials) return
     const generation = this.generation
     this.timer = setTimeout(() => {
-      void this.enqueue(() => this.synchronize()).then(() => {
+      void this.enqueue(() => this.observe('media.recover', () => this.synchronize())).then(() => {
         this.failures = 0
         if (!this.needsReset && (!this.pc || this.pc.connectionState === 'connected' || this.pc.connectionState === 'new')) {
           this.connection('connected')

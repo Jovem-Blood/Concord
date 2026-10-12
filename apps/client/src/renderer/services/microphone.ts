@@ -1,8 +1,8 @@
 import type { VoiceState } from './cloudflare/types'
 import { AppError } from '../../shared/errors'
-import { logClient } from './telemetry'
+import { logClient, startClientOperation } from './telemetry'
 
-type Publisher = { publishMicrophone(track: MediaStreamTrack): Promise<void>; unpublishMicrophone(): Promise<void> }
+type Publisher = { publishMicrophone(track: MediaStreamTrack, parent?: string): Promise<void>; unpublishMicrophone(): Promise<void> }
 const ACTIVATION_TIMEOUT_MS = 20_000
 export class MicrophoneService {
   private track: MediaStreamTrack | null = null
@@ -29,6 +29,7 @@ export class MicrophoneService {
     await this.start(false)
   }
   private async start(muted: boolean): Promise<void> {
+    const operation = startClientOperation('microphone.activate')
     const epoch = this.epoch
     this.busy = true; this.emit()
     let timeout: ReturnType<typeof setTimeout> | undefined
@@ -37,8 +38,10 @@ export class MicrophoneService {
         timeout = setTimeout(() => reject(new DOMException('Microphone activation timed out', 'TimeoutError')), ACTIVATION_TIMEOUT_MS)
         this.cancelActivation = () => reject(new DOMException('Microphone activation cancelled', 'AbortError'))
       })
-      await Promise.race([this.activate(epoch, muted), deadline])
+      await Promise.race([this.activate(epoch, muted, operation.traceparent), deadline])
+      operation.end(undefined, epoch !== this.epoch ? 'cancelled' : 'success')
     } catch (error) {
+      operation.end(error)
       if (epoch !== this.epoch) return
       // Invalidate late permission/publication results before making retry available.
       this.epoch++
@@ -54,7 +57,7 @@ export class MicrophoneService {
       if (epoch === this.epoch) { this.cancelActivation = null; this.busy = false; this.emit() }
     }
   }
-  private async activate(epoch: number, muted: boolean): Promise<void> {
+  private async activate(epoch: number, muted: boolean, parent?: string): Promise<void> {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: {
       echoCancellation: true, noiseSuppression: true, autoGainControl: false, channelCount: { ideal: 1 },
       ...(this.deviceId ? { deviceId: { exact: this.deviceId } } : {}),
@@ -84,7 +87,7 @@ export class MicrophoneService {
     output.enabled = false
     await context.resume()
     if (epoch !== this.epoch) { track.stop(); output.stop(); return }
-    await this.publisher.publishMicrophone(output)
+    await (parent ? this.publisher.publishMicrophone(output, parent) : this.publisher.publishMicrophone(output))
     if (epoch !== this.epoch) { track.stop(); output.stop(); return }
     track.enabled = !muted
     output.enabled = !muted

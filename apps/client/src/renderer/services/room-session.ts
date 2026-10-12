@@ -6,11 +6,11 @@ import { CloudflareRoomService } from './cloudflare/room'
 import type { RoomSnapshot } from './cloudflare/types'
 import { RoomChat, type ChatSnapshot } from './room-chat'
 import { requestJoinToken, serverUrl } from './server'
-import { logClient } from './telemetry'
+import { logClient, startClientOperation, traceClientOperation, type ClientOperation } from './telemetry'
 
 type State = 'joining' | 'connected' | 'reconnecting' | 'disconnected'
 type RoomSocket = Socket<ServerEvents, ClientEvents>
-type Outgoing = { input: SendMessage; deadline: number; inFlight: boolean; timer?: ReturnType<typeof setTimeout> }
+type Outgoing = { input: SendMessage; deadline: number; inFlight: boolean; operation: ClientOperation; timer?: ReturnType<typeof setTimeout> }
 export type MediaService = Pick<CloudflareRoomService, 'connect' | 'disconnect' | 'updateCredentials' | 'setSignalingAvailable' | 'updatePresence' | 'onSnapshot' | 'onConnection' | 'publishScreen' | 'unpublishScreen' | 'publishMicrophone' | 'unpublishMicrophone' | 'pauseShare' | 'resumeShare'>
 
 const explanations: Record<ErrorCode, string> = {
@@ -50,6 +50,7 @@ export class RoomSession {
   private typing = false
   private pending = new Map<string, Outgoing>()
   private joined?: { resolve: () => void; reject: (error: Error) => void }
+  private recoveryOperation?: ClientOperation
   private connectionListener: (state: State, message?: string) => void = () => undefined
   private chatListener: (chat: ChatSnapshot) => void = () => undefined
   private chat = new RoomChat((snapshot) => this.chatListener(snapshot))
@@ -78,24 +79,28 @@ export class RoomSession {
   onChat(listener: (snapshot: ChatSnapshot) => void): void { this.chatListener = listener }
 
   async join(roomCode: string, name: string): Promise<void> {
+    return traceClientOperation('room.join', (operation) => this.joinRoom(roomCode, name, operation.traceparent))
+  }
+
+  private async joinRoom(roomCode: string, name: string, parent?: string): Promise<void> {
     const drafts = this.roomCode === roomCode ? this.chat.snapshot.drafts : []
     const cleanup = this.disconnect()
     const generation = this.generation
     await cleanup
-    if (generation !== this.generation) throw new Error('Entrada cancelada.')
+    if (generation !== this.generation) throw new DOMException('Entrada cancelada.', 'AbortError')
     this.name = name
     this.roomCode = roomCode
     this.chat.restoreDrafts(drafts)
     this.connection('joining')
     let credentials: Credentials
-    try { credentials = await requestJoinToken(roomCode, name) } catch (error) {
+    try { credentials = await requestJoinToken(roomCode, name, parent) } catch (error) {
       if (generation === this.generation) this.connection('disconnected')
       throw error
     }
-    if (generation !== this.generation) { this.sendLeave(credentials, false); throw new Error('Entrada cancelada.') }
+    if (generation !== this.generation) { this.sendLeave(credentials, false); throw new DOMException('Entrada cancelada.', 'AbortError') }
     this.credentials = credentials
     await this.media.connect(credentials)
-    if (generation !== this.generation) throw new Error('Entrada cancelada.')
+    if (generation !== this.generation) throw new DOMException('Entrada cancelada.', 'AbortError')
     const socket = this.createSocket()
     this.socket = socket
     socket.auth = (callback) => callback({ protocol: PROTOCOL_VERSION, token: this.credentials?.participantToken })
@@ -111,6 +116,7 @@ export class RoomSession {
     })
     socket.on('disconnect', (reason) => {
       if (!current()) return
+      logClient('warn', 'signaling.disconnected')
       this.connectionGeneration++
       // Regular emits avoid dropping packets during a momentary transport backpressure window.
       // Never let Socket.IO replay anything after a disconnect; our bounded outbox owns retries.
@@ -127,6 +133,7 @@ export class RoomSession {
     })
     socket.on('connect_error', (error) => {
       if (!current()) return
+      logClient('warn', 'signaling.connect.failed', { error })
       const code = (error as Error & { data?: { code?: ErrorCode } }).data?.code
       if (code === 'SESSION_ENDED' || code === 'UPDATE_REQUIRED' || code === 'REPLACED') this.end(code, false)
       else { this.connection('reconnecting'); this.startDeadline() }
@@ -200,8 +207,9 @@ export class RoomSession {
       this.joined?.resolve(); this.joined = undefined
       this.pump()
       this.scheduleRenewal()
-    } catch {
+    } catch (error) {
       if (!this.current(generation, connection)) return
+      logClient('warn', 'signaling.sync.failed', { error })
       this.syncing = false
       this.connection('reconnecting')
       this.startDeadline()
@@ -214,7 +222,7 @@ export class RoomSession {
     this.serverClockOffset = state.serverTime - Date.now()
     const changed = this.chat.synchronize(state, this.credentials!.identity, !this.loaded)
     if (changed) {
-      for (const outgoing of this.pending.values()) clearTimeout(outgoing.timer)
+      for (const outgoing of this.pending.values()) { clearTimeout(outgoing.timer); outgoing.operation.end(undefined, 'cancelled') }
       this.pending.clear()
     } else {
       for (const message of state.messages) if (message.senderId === this.credentials!.identity) this.finishPending(message.id)
@@ -249,10 +257,13 @@ export class RoomSession {
   dismissDraft(id: string): void { this.chat.dismissDraft(id) }
 
   private enqueueMessage(input: SendMessage): void {
-    const outgoing: Outgoing = { input, deadline: Date.now() + RETRY_MS, inFlight: false }
+    const operation = startClientOperation('chat.send')
+    if (operation.traceparent) input.traceparent = operation.traceparent
+    const outgoing: Outgoing = { input, deadline: Date.now() + RETRY_MS, inFlight: false, operation }
     outgoing.timer = setTimeout(() => {
       if (this.pending.get(input.id) !== outgoing) return
-      this.pending.delete(input.id); this.chat.status(input.id, 'failed'); this.pump()
+      this.finishPending(input.id, new DOMException('Chat confirmation timed out', 'TimeoutError'))
+      this.chat.status(input.id, 'failed'); this.pump()
     }, RETRY_MS)
     this.pending.set(input.id, outgoing)
     this.pump()
@@ -265,9 +276,10 @@ export class RoomSession {
     if (!outgoing || outgoing.inFlight) return
     const { input } = outgoing
     if (Date.now() >= outgoing.deadline) {
-      this.finishPending(input.id); this.chat.status(input.id, 'failed'); this.pump(); return
+      this.finishPending(input.id, new DOMException('Chat confirmation timed out', 'TimeoutError'))
+      this.chat.status(input.id, 'failed'); this.pump(); return
     }
-    if (input.conversation !== this.conversation) { this.finishPending(input.id); return }
+    if (input.conversation !== this.conversation) { this.finishPending(input.id, new DOMException('Conversation changed', 'AbortError')); return }
     outgoing.inFlight = true
     const generation = this.generation
     const connection = this.connectionGeneration
@@ -277,7 +289,10 @@ export class RoomSession {
       if (error) { this.pump(); return }
       if (result.ok) { this.accept(result.value, false); this.finishPending(input.id) }
       else if (result.code === 'CONVERSATION_RESET') { void this.synchronize(); return }
-      else { this.finishPending(input.id); this.chat.status(input.id, 'failed', result.code) }
+      else {
+        this.finishPending(input.id, new Error(result.code)); this.chat.status(input.id, 'failed', result.code)
+        logClient('warn', 'chat.send.rejected', { code: result.code })
+      }
       this.pump()
     })
   }
@@ -288,7 +303,10 @@ export class RoomSession {
     if (message.senderId === this.credentials.identity) this.finishPending(message.id)
     this.pump()
   }
-  private finishPending(id: string): void { clearTimeout(this.pending.get(id)?.timer); this.pending.delete(id) }
+  private finishPending(id: string, error?: unknown): void {
+    const outgoing = this.pending.get(id)
+    clearTimeout(outgoing?.timer); outgoing?.operation.end(error); this.pending.delete(id)
+  }
 
   setChatOpen(open: boolean): void { this.chat.setOpen(open); if (!open) this.setTyping(false) }
   setTyping(active: boolean): void {
@@ -317,7 +335,8 @@ export class RoomSession {
       if (!result.ok) { this.end(result.code); return }
       this.adoptCredentials(result.value)
       this.scheduleRenewal()
-    } catch {
+    } catch (error) {
+      logClient('warn', 'signaling.renew.failed', { error })
       if (this.current(generation, connection)) this.renewTimer = setTimeout(() => void this.renew(), ACK_MS)
     }
   }
@@ -339,13 +358,19 @@ export class RoomSession {
   }
   private current(generation: number, connection: number): boolean { return this.generation === generation && this.connectionGeneration === connection && Boolean(this.credentials) }
   private ready(): boolean { return this.state === 'connected' && !this.syncing && Boolean(this.socket?.connected && this.credentials) && this.checkDeadline() }
-  private connection(state: State, message?: string): void { this.state = state; this.connectionListener(state, message) }
+  private connection(state: State, message?: string): void {
+    if (state === 'reconnecting' && this.state === 'connected') this.recoveryOperation ??= startClientOperation('room.recover')
+    if (state === 'connected') { this.recoveryOperation?.end(); this.recoveryOperation = undefined }
+    this.state = state; this.connectionListener(state, message)
+  }
   private clearTyping(): void {
     clearTimeout(this.typingTimer); clearTimeout(this.remoteTypingTimer)
     this.typing = false; this.lastTyping = 0
   }
 
   private end(code: ErrorCode, notifyServer = code !== 'REPLACED'): void {
+    this.recoveryOperation?.end(new Error(code)); this.recoveryOperation = undefined
+    logClient('warn', 'signaling.session.ended', { code })
     const message = explanations[code] ?? explanations.SESSION_ENDED
     this.joined?.reject(new Error(message)); this.joined = undefined
     void this.disconnect(false, notifyServer, true)
@@ -353,13 +378,14 @@ export class RoomSession {
   }
 
   async disconnect(unloading = false, notifyServer = true, recoverDrafts = false): Promise<void> {
+    this.recoveryOperation?.end(undefined, 'cancelled'); this.recoveryOperation = undefined
     const credentials = this.credentials
     const socket = this.socket
     this.generation++; this.connectionGeneration++
     this.credentials = null; this.socket = null
-    this.joined?.reject(new Error('Entrada cancelada.')); this.joined = undefined
+    this.joined?.reject(new DOMException('Entrada cancelada.', 'AbortError')); this.joined = undefined
     clearTimeout(this.recoveryTimer); clearTimeout(this.renewTimer); this.clearTyping()
-    for (const outgoing of this.pending.values()) clearTimeout(outgoing.timer)
+    for (const outgoing of this.pending.values()) { clearTimeout(outgoing.timer); outgoing.operation.end(undefined, 'cancelled') }
     this.pending.clear()
     this.deadline = 0; this.syncing = false; this.loaded = false; this.conversation = ''; this.cursor = 0; this.nextSequence = 1
     this.bufferedMessages = []; this.bufferedPresence = undefined
@@ -392,9 +418,9 @@ export class RoomSession {
     return this.media.publishScreen(stream, resolution)
   }
   unpublishScreen(): Promise<void> { return this.media.unpublishScreen() }
-  publishMicrophone(track: MediaStreamTrack): Promise<void> {
+  publishMicrophone(track: MediaStreamTrack, parent?: string): Promise<void> {
     if (!this.ready()) { track.stop(); return Promise.reject(new Error('Aguarde a conexão com a sala.')) }
-    return this.media.publishMicrophone(track)
+    return parent ? this.media.publishMicrophone(track, parent) : this.media.publishMicrophone(track)
   }
   unpublishMicrophone(): Promise<void> { return this.media.unpublishMicrophone() }
   pauseShare(key: string): Promise<void> { return this.media.pauseShare(key) }

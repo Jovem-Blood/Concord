@@ -1,7 +1,9 @@
 import { createApp, h } from 'vue'
 import { RouterView } from 'vue-router'
 import { router } from './router'
-import { logClient } from './services/telemetry'
+import { initializeClientTelemetry, logClient } from './services/telemetry'
+
+void initializeClientTelemetry()
 import './styles.css'
 
 window.addEventListener('error', (event) => logClient('error', 'client.uncaught', { error: event.error }))

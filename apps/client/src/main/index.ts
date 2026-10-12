@@ -5,6 +5,7 @@ import { hasPendingCaptureSelection, registerCaptureHandlers } from './capture'
 import { registerClipboardHandlers } from './clipboard'
 import { audioOutputPermission, displayCapturePermission, microphonePermission, trustedRendererUrl } from './permissions'
 import { startAutoUpdates } from './updater'
+import { initializeDesktopTelemetry, reportDesktopError } from './telemetry'
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined
 declare const MAIN_WINDOW_VITE_NAME: string
@@ -74,6 +75,8 @@ function createMainWindow(): void {
   })
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     console.error('[error] desktop.renderer.gone', { reason: details.reason, exitCode: details.exitCode })
+    if (details.reason !== 'clean-exit') void reportDesktopError('desktop.renderer.gone', undefined,
+      `RENDERER_${details.reason.toUpperCase().replace(/-/g, '_')}`)
   })
 
   mainWindow.once('ready-to-show', () => mainWindow?.show())
@@ -88,15 +91,20 @@ function createMainWindow(): void {
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     void mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL).catch((error: unknown) => {
       console.error('[error] desktop.window.load_failed', error)
+      void reportDesktopError('desktop.window.load_failed', error)
     })
   } else {
     void mainWindow.loadFile(
       path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
-    ).catch((error: unknown) => { console.error('[error] desktop.window.load_failed', error) })
+    ).catch((error: unknown) => {
+      console.error('[error] desktop.window.load_failed', error)
+      void reportDesktopError('desktop.window.load_failed', error)
+    })
   }
 }
 
 void app.whenReady().then(() => {
+  void initializeDesktopTelemetry(app.getVersion())
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
@@ -115,15 +123,16 @@ void app.whenReady().then(() => {
   })
 }).catch((error: unknown) => {
   console.error('[error] desktop.startup.failed', error)
-  app.exit(1)
+  void reportDesktopError('desktop.startup.failed', error).finally(() => app.exit(1))
 })
 
 process.on('uncaughtException', (error) => {
   console.error('[error] desktop.uncaught', error)
-  app.exit(1)
+  void reportDesktopError('desktop.uncaught', error).finally(() => app.exit(1))
 })
 process.on('unhandledRejection', (reason) => {
   console.error('[error] desktop.unhandled_rejection', reason)
+  void reportDesktopError('desktop.unhandled_rejection', reason)
 })
 
 app.on('window-all-closed', () => {

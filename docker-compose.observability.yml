@@ -1,0 +1,86 @@
+# Optional override: docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d --build
+services:
+  server:
+    environment:
+      OTEL_SDK_DISABLED: "false"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+
+  alloy:
+    image: grafana/alloy:v1.20.1
+    restart: unless-stopped
+    command: [run, --server.http.listen-addr=0.0.0.0:12345, --storage.path=/var/lib/alloy, /etc/alloy/config.alloy]
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy
+    ports:
+      - "127.0.0.1:${OTLP_HTTP_PORT:-4318}:4318"
+      - "127.0.0.1:${OTLP_GRPC_PORT:-4317}:4317"
+    depends_on: [tempo, loki, prometheus]
+    mem_limit: 256m
+    logging:
+      options: { max-size: 10m, max-file: "3" }
+
+  tempo:
+    image: grafana/tempo:3.1.0
+    restart: unless-stopped
+    command: [-config.file=/etc/tempo.yaml, -target=all]
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    mem_limit: 512m
+    logging:
+      options: { max-size: 10m, max-file: "3" }
+
+  loki:
+    image: grafana/loki:3.7.8
+    restart: unless-stopped
+    command: [-config.file=/etc/loki.yaml]
+    volumes:
+      - ./observability/loki.yaml:/etc/loki.yaml:ro
+      - loki-data:/loki
+    mem_limit: 512m
+    logging:
+      options: { max-size: 10m, max-file: "3" }
+
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-remote-write-receiver
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=1GB
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    mem_limit: 256m
+    logging:
+      options: { max-size: 10m, max-file: "3" }
+
+  grafana:
+    image: grafana/grafana:13.2.3
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env to enable observability}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on: [tempo, loki, prometheus]
+    mem_limit: 384m
+    logging:
+      options: { max-size: 10m, max-file: "3" }
+
+volumes:
+  alloy-data:
+  tempo-data:
+  loki-data:
+  prometheus-data:
+  grafana-data:
