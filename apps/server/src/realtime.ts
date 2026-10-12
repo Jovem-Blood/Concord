@@ -2,10 +2,11 @@ import { Server, type Socket } from 'socket.io'
 import type { Server as HttpServer } from 'node:http'
 import { ACK_MS, PROTOCOL_VERSION, SOCKET_PATH, type Ack, type ClientEvents, type ServerEvents } from '@concord/protocol'
 import { RoomAuthority, RoomError, type Participant } from './rooms.js'
+import type { Telemetry } from './telemetry.js'
 
 type RoomSocket = Socket<ClientEvents, ServerEvents, Record<string, never>, { member: Participant }>
 
-export function createRealtime(server: HttpServer, rooms: RoomAuthority, allowedOrigin: (origin?: string) => boolean) {
+export function createRealtime(server: HttpServer, rooms: RoomAuthority, allowedOrigin: (origin?: string) => boolean, telemetry?: Telemetry) {
   const io = new Server<ClientEvents, ServerEvents, Record<string, never>, { member: Participant }>(server, {
     path: SOCKET_PATH, transports: ['websocket'], serveClient: false,
     pingInterval: 10_000, pingTimeout: 5_000, connectTimeout: 10_000, maxHttpBufferSize: 16_384,
@@ -60,23 +61,26 @@ export function createRealtime(server: HttpServer, rooms: RoomAuthority, allowed
       if (++events > 60 || !rooms.owns(member, socket.id)) { socket.disconnect(true); return }
       next()
     })
-    function handle<T>(ack: Ack<T>, action: () => T): void {
+    function handle<T>(ack: Ack<T>, action: () => T, name: string, parent?: string): void {
       if (typeof ack !== 'function') return
       try {
         if (!rooms.owns(member, socket.id)) throw new RoomError('SESSION_ENDED')
         if (!writable(socket)) return
-        ack({ ok: true, value: action() })
-      } catch (error) { ack({ ok: false, code: error instanceof RoomError ? error.code : 'INVALID_REQUEST' }) }
+        ack({ ok: true, value: telemetry ? telemetry.socketOperation(name, parent, action) : action() })
+      } catch (error) {
+        if (!(error instanceof RoomError)) telemetry?.event('error', 'signaling.handler.failed', { operation: name }, error)
+        ack({ ok: false, code: error instanceof RoomError ? error.code : 'INVALID_REQUEST' })
+      }
     }
-    socket.on('session:sync', (request, ack) => handle(ack, () => { const state = rooms.sync(member, request); clearTimeout(syncTimer); return state }))
-    socket.on('session:renew', (ack) => handle(ack, () => rooms.renew(member)))
-    socket.on('session:confirm', (token, ack) => handle(ack, () => { rooms.confirm(member, token); return null }))
+    socket.on('session:sync', (request, ack) => handle(ack, () => { const state = rooms.sync(member, request); clearTimeout(syncTimer); return state }, 'signaling.sync'))
+    socket.on('session:renew', (ack) => handle(ack, () => rooms.renew(member), 'signaling.renew'))
+    socket.on('session:confirm', (token, ack) => handle(ack, () => { rooms.confirm(member, token); return null }, 'signaling.confirm'))
     socket.on('session:leave', (ack) => {
       if (!rooms.owns(member, socket.id)) return
       if (typeof ack === 'function') ack({ ok: true, value: null })
       rooms.remove(member)
     })
-    socket.on('chat:send', (input, ack) => handle(ack, () => rooms.send(member, input)))
+    socket.on('chat:send', (input, ack) => handle(ack, () => rooms.send(member, input), 'chat.receive', input?.traceparent))
     socket.on('chat:typing', (input) => { if (rooms.owns(member, socket.id)) rooms.setTyping(member, input) })
     socket.on('disconnect', () => {
       clearTimeout(syncTimer)

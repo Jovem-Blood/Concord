@@ -147,6 +147,8 @@ Execute exatamente uma instância de `server`: presença, tokens e publicações
 | `LOG_LEVEL` | Nível mínimo dos logs do servidor (`error`, `warn`, `info`, `debug`); padrão `info` |
 | `VITE_LOG_LEVEL` | Nível mínimo do console do cliente; padrão `info` |
 
+A exportação OpenTelemetry é opcional e aceita destinos OTLP por HTTP/protobuf, HTTP/JSON ou gRPC. Sem endpoint configurado, fica desativada. Há um Compose Grafana separado, com traces, logs, métricas, dashboard e regras de alerta. Veja [Observabilidade opcional](docs/observability.md) para ativar, conectar sua própria stack e configurar notificações.
+
 Os logs do servidor são JSON estruturado. O cliente envia erros, avisos, perda de conexão e recuperação para `/v1/client-events`; uma fila limitada em memória tenta reenviar quando a conexão volta. Os relatos contêm ID temporário do cliente, plataforma, evento, nível e classificação limitada do erro. Não incluem código da sala, nome, token, SDP ou conteúdo do chat. Eventos pendentes se perdem ao fechar o aplicativo.
 
 O Concord usa STUN da Cloudflare por padrão. Para atender redes que exigem relay TURN, configure `CLOUDFLARE_TURN_KEY_ID` e `CLOUDFLARE_TURN_API_TOKEN` juntos no servidor; a API gera credenciais ICE temporárias para os clientes. Sem essa configuração, redes que dependem de relay não são suportadas. A disponibilidade de áudio na captura web depende do navegador, sistema operacional e fonte escolhida; quando o áudio não está disponível, o vídeo continua com um aviso.

@@ -1,0 +1,109 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: Concord
+    folder: Concord
+    interval: 30s
+    rules:
+      - uid: concord-client-errors
+        title: "Concord: erros recorrentes no cliente"
+        condition: C
+        for: 2m
+        noDataState: OK
+        execErrState: Alerting
+        labels:
+          service: concord
+          severity: warning
+        annotations:
+          summary: "Clientes relataram pelo menos três erros em cinco minutos."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: concord-prometheus
+            model:
+              refId: A
+              expr: 'sum(increase(concord_client_errors_total[5m])) or vector(0)'
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [2.5] }
+                  operator: { type: and }
+                  reducer: { type: last }
+                  type: query
+      - uid: concord-api-errors
+        title: "Concord: falhas recorrentes na API"
+        condition: C
+        for: 2m
+        noDataState: OK
+        execErrState: Alerting
+        labels:
+          service: concord
+          severity: critical
+        annotations:
+          summary: "A API retornou pelo menos três erros 5xx em cinco minutos."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: concord-prometheus
+            model:
+              refId: A
+              expr: 'sum(increase(concord_http_requests_total{http_response_status_code=~"5.."}[5m])) or vector(0)'
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [2.5] }
+                  operator: { type: and }
+                  reducer: { type: last }
+                  type: query
+      - uid: concord-telemetry-missing
+        title: "Concord: telemetria da API ausente"
+        condition: C
+        for: 2m
+        noDataState: OK
+        execErrState: Alerting
+        labels:
+          service: concord
+          severity: critical
+        annotations:
+          summary: "A API parou de enviar telemetria; confira a API, o exportador e o Alloy."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: concord-prometheus
+            model:
+              refId: A
+              expr: 'absent(concord_server_heartbeat{job="concord-server"}) or (time() - max(timestamp(concord_server_heartbeat{job="concord-server"})) > bool 90)'
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.5] }
+                  operator: { type: and }
+                  reducer: { type: last }
+                  type: query

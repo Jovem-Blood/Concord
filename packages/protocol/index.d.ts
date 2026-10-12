@@ -1,4 +1,5 @@
 export const PROTOCOL_VERSION: 2
+export * from './telemetry.js'
 export const SOCKET_PATH: '/v2/realtime'
 export const RECOVERY_MS: number
 export const ACK_MS: number
@@ -19,7 +20,7 @@ export type Message = { id: string; type: 'text'; content: string; sentAt: numbe
 export type Typist = { identity: string; name: string; expiresAt: number }
 export type SyncRequest = { conversation: string; after: number }
 export type SyncState = { presence: Presence; conversation: string; messages: Message[]; cursor: number; typing: Typist[]; serverTime: number; credentials: Credentials; nextClientSequence: number }
-export type SendMessage = { id: string; content: string; conversation: string; clientSequence: number }
+export type SendMessage = { id: string; content: string; conversation: string; clientSequence: number; traceparent?: string }
 export type ErrorCode = 'UPDATE_REQUIRED' | 'SESSION_ENDED' | 'REPLACED' | 'CONVERSATION_RESET' | 'MESSAGE_EXPIRED' | 'INVALID_REQUEST' | 'RATE_LIMITED' | 'NOT_READY'
 export type Result<T> = { ok: true; value: T } | { ok: false; code: ErrorCode }
 export type Ack<T> = (result: Result<T>) => void

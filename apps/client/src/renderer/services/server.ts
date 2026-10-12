@@ -5,11 +5,11 @@ export type JoinResponse = Credentials
 
 export const serverUrl = (import.meta.env.VITE_SERVER_URL ?? 'http://localhost:3001').replace(/\/$/, '')
 
-export async function requestJoinToken(roomCode: string, displayName: string): Promise<JoinResponse> {
+export async function requestJoinToken(roomCode: string, displayName: string, traceparent?: string): Promise<JoinResponse> {
   try {
     const response = await fetch(`${serverUrl}/v1/join`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...(traceparent ? { traceparent } : {}) },
       body: JSON.stringify({ roomCode, displayName, protocol: PROTOCOL_VERSION }),
       signal: AbortSignal.timeout(15_000),
     })

@@ -1,0 +1,36 @@
+apiVersion: 1
+datasources:
+  - name: Concord Metrics
+    uid: concord-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+  - name: Concord Traces
+    uid: concord-tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: false
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: concord-loki
+        spanStartTimeShift: -1m
+        spanEndTimeShift: 1m
+        tags: [service.name]
+        filterByTraceID: true
+        filterBySpanID: false
+  - name: Concord Logs
+    uid: concord-loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      derivedFields:
+        - name: TraceID
+          matcherType: label
+          matcherRegex: trace_id
+          datasourceUid: concord-tempo
+          url: '$${__value.raw}'

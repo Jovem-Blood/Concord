@@ -2,13 +2,15 @@ import cors from '@fastify/cors'
 import rateLimit from '@fastify/rate-limit'
 import Fastify, { type FastifyRequest } from 'fastify'
 import { createHash } from 'node:crypto'
-import { PROTOCOL_VERSION } from '@concord/protocol'
+import { PROTOCOL_VERSION, validClientEvent } from '@concord/protocol'
+import type { Span } from '@opentelemetry/api'
+import type { Telemetry } from './telemetry.js'
 import { RoomAuthority, type Participant } from './rooms.js'
 import { createRealtime } from './realtime.js'
 import type { ServerConfig } from './config.js'
 import { parseJoinInput } from './validation.js'
 import { validMediaSource, type MediaSource } from './media.js'
-import { createSfuClient, type SfuClient, type SessionDescription, type SfuTrack } from './sfu.js'
+import { createSfuClient, UpstreamHttpError, type SfuClient, type SessionDescription, type SfuTrack } from './sfu.js'
 
 function fail(statusCode: number, message: string): never {
   throw Object.assign(new Error(message), { statusCode })
@@ -27,13 +29,27 @@ const tokenHash = (token: string) => createHash('sha256').update(token).digest('
 
 export async function buildApp(
   config: ServerConfig,
-  sfu: SfuClient = createSfuClient(config.cloudflareSfu),
+  sfuClient?: SfuClient,
+  telemetry?: Telemetry,
 ) {
+  const sfu = sfuClient ?? createSfuClient(config.cloudflareSfu, fetch, telemetry)
   const app = Fastify({
     logger: { level: process.env.LOG_LEVEL ?? 'info', redact: ['req.headers.authorization', 'req.body'] },
     bodyLimit: 256 * 1024,
   })
   const rooms = new RoomAuthority(closeSession)
+  const requestSpans = new WeakMap<FastifyRequest, Span>()
+  app.addHook('onRequest', (request, _reply, done) => {
+    const span = telemetry?.requestStarted(request.method, request.routeOptions.url ?? 'unmatched',
+      typeof request.headers.traceparent === 'string' ? request.headers.traceparent : undefined)
+    if (span) requestSpans.set(request, span)
+    if (telemetry) telemetry.withSpan(span, done)
+    else done()
+  })
+  app.addHook('onResponse', async (request, reply) => {
+    telemetry?.requestFinished(requestSpans.get(request), request.method, request.routeOptions.url ?? 'unmatched',
+      reply.statusCode, reply.elapsedTime)
+  })
   const members = rooms.members
   const active = (member: Participant) => rooms.active(member)
   function allowedOrigin(origin?: string): boolean {
@@ -48,35 +64,32 @@ export async function buildApp(
     },
   })
   await app.register(rateLimit, { max: 30, timeWindow: '1 minute' })
-  const realtime = createRealtime(app.server, rooms, allowedOrigin)
+  const realtime = createRealtime(app.server, rooms, allowedOrigin, telemetry)
   // WebSockets must be closed before Fastify waits for HTTP connections to drain.
   app.addHook('preClose', async () => { await realtime.close() })
 
   // Anonymous reports also cover failures before a participant can join. Keep the
   // payload deliberately narrow so client secrets and room content cannot be logged.
   app.post('/v1/client-events', {
-    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
-    bodyLimit: 2048,
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    bodyLimit: 64 * 1024,
   }, async (request, reply) => {
-    const body = request.body
-    if (!record(body) ||
-      !['error', 'warn', 'info', 'debug'].includes(String(body.level)) ||
-      typeof body.event !== 'string' || !/^[a-z][a-z0-9_.-]{2,63}$/.test(body.event) ||
-      typeof body.clientId !== 'string' || !/^[a-f0-9-]{36}$/.test(body.clientId) ||
-      (body.code !== undefined && (typeof body.code !== 'string' || !/^[A-Z][A-Z0-9_]{0,63}$/.test(body.code))) ||
-      (body.reason !== undefined && (typeof body.reason !== 'string' ||
-        !/^(?:[1-5]\d\d|HTTP_ERROR|UnknownError|DOMException|AbortError|NetworkError|NotAllowedError|NotFoundError|NotReadableError|SecurityError|InvalidStateError|OperationError|TimeoutError|TypeError|RangeError|SyntaxError|ReferenceError|Error)$/.test(body.reason))) ||
-      (body.attempt !== undefined && (!Number.isInteger(body.attempt) || Number(body.attempt) < 0 || Number(body.attempt) > 1000)) ||
-      (body.platform !== 'web' && body.platform !== 'desktop')) {
+    const reports = Array.isArray(request.body) ? request.body : [request.body]
+    if (!reports.length || reports.length > 20 || !reports.every(validClientEvent)) {
       return reply.code(400).send({ error: 'INVALID_CLIENT_EVENT' })
     }
-    const details = { event: 'client.event', clientEvent: body.event, clientId: body.clientId,
-      platform: body.platform, code: body.code, reason: body.reason, attempt: body.attempt }
-    switch (body.level) {
-      case 'error': request.log.error(details); break
-      case 'warn': request.log.warn(details); break
-      case 'debug': request.log.debug(details); break
-      default: request.log.info(details)
+    for (const body of reports) {
+      // Explicit projection: extra client fields never enter logs or OTLP.
+      const details = { event: 'client.event', clientEvent: body.event, clientId: body.clientId,
+        platform: body.platform, code: body.code, reason: body.reason, attempt: body.attempt,
+        version: body.version, stack: body.stack, traceparent: body.span?.traceparent }
+      telemetry?.recordClient(body)
+      switch (body.level) {
+        case 'error': request.log.error(details); break
+        case 'warn': request.log.warn(details); break
+        case 'debug': request.log.debug(details); break
+        default: request.log.info(details)
+      }
     }
     return reply.code(204).send()
   })
@@ -127,6 +140,9 @@ export async function buildApp(
   }
 
   app.get('/health', async () => ({ status: 'ok', mediaProvider: 'cloudflare-sfu' }))
+  app.get('/v1/telemetry', async (_request, reply) => reply.header('cache-control', 'no-store').send({
+    ...(telemetry?.clientConfig ?? { enabled: false, traces: false, sampleRatio: 0 }), serverTime: Date.now(),
+  }))
   app.post('/v1/join', async (request, reply) => {
     if (!record(request.body) || request.body.protocol !== PROTOCOL_VERSION) {
       return reply.code(426).send({ error: 'UPDATE_REQUIRED', message: 'Atualize o Concord para entrar nesta sala.' })
@@ -142,16 +158,20 @@ export async function buildApp(
     if (!config.cloudflareTurn) {
       return reply.header('cache-control', 'no-store').send({ iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }] })
     }
-    const response = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(config.cloudflareTurn.keyId)}/credentials/generate-ice-servers`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${config.cloudflareTurn.apiToken}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ ttl: 86_400 }),
-      signal: AbortSignal.timeout(10_000),
-    })
-    if (!response.ok) throw new Error(`Cloudflare TURN request failed (${response.status})`)
-    const body = await response.json() as { iceServers?: unknown }
-    if (!Array.isArray(body.iceServers) || body.iceServers.length === 0) throw new Error('Cloudflare TURN returned no ICE servers')
-    return reply.header('cache-control', 'no-store').send({ iceServers: body.iceServers })
+    const turn = config.cloudflareTurn
+    const action = async () => {
+      const response = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(turn.keyId)}/credentials/generate-ice-servers`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${turn.apiToken}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ ttl: 86_400 }),
+        signal: AbortSignal.timeout(10_000),
+      })
+      if (!response.ok) throw new UpstreamHttpError(response.status, 'TURN')
+      const body = await response.json() as { iceServers?: unknown }
+      if (!Array.isArray(body.iceServers) || body.iceServers.length === 0) throw new Error('Cloudflare TURN returned no ICE servers')
+      return { iceServers: body.iceServers }
+    }
+    return reply.header('cache-control', 'no-store').send(await (telemetry ? telemetry.operation('sfu.turn', action) : action()))
   })
   // Replacing a session withdraws its publications, including during network recovery.
   app.post('/v1/session', authenticated, (request) => exclusive(request, async (member) => {
@@ -251,6 +271,11 @@ export async function buildApp(
   app.setErrorHandler((error, request, reply) => {
     const candidate = Number((error as { statusCode?: number }).statusCode ?? 500)
     const statusCode = candidate >= 400 && candidate < 500 ? candidate : 500
+    if (statusCode >= 500) {
+      telemetry?.failure(requestSpans.get(request), error)
+      telemetry?.event('error', 'request.failed', { 'http.route': request.routeOptions.url ?? 'unmatched',
+        'http.response.status_code': statusCode }, error)
+    }
     const details = { event: 'request.failed', statusCode, method: request.method, path: request.routeOptions.url ?? 'unmatched',
       err: error }
     if (statusCode >= 500) request.log.error(details)

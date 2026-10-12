@@ -27,7 +27,7 @@ import { emptyChat, type ChatSnapshot } from './services/room-chat'
 import type { ParticipantView, RemoteShareView } from './services/cloudflare/types'
 import { PresenceSoundNotifier, soundPlayer } from './services/sounds'
 import { serverUrl } from './services/server'
-import { logClient } from './services/telemetry'
+import { logClient, traceClientOperation } from './services/telemetry'
 import type { AudioLevel } from './services/audio-level'
 
 const roomService = new RoomSession()
@@ -330,14 +330,17 @@ async function startSharing(
   const generation = captureGeneration
 
   try {
-    const stream = await captureProvider.capture({ source, includeSystemAudio, resolution })
+    const stream = await traceClientOperation('screen.capture', () => captureProvider.capture({ source, includeSystemAudio, resolution }))
     if (generation !== captureGeneration || roomState.value !== 'connected') { stopMediaStream(stream); return }
 
     localStream.value = stream
     const videoTrack = stream.getVideoTracks()[0]
     if (!videoTrack) throw new Error('Missing video track')
     videoTrack.contentHint = 'motion'
-    videoTrack.onended = () => void stopSharing()
+    videoTrack.onended = () => {
+      logClient('warn', 'screen.capture.ended')
+      void stopSharing()
+    }
     for (const audioTrack of stream.getAudioTracks()) audioTrack.contentHint = 'music'
 
     if (includeSystemAudio && stream.getAudioTracks().length === 0 && captureEnvironment === 'web') {
