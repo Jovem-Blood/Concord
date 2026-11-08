@@ -12,4 +12,4 @@ Nomes reservados:
 - `screen-open.mp3`
 - `screen-close.mp3`
 
-No momento, somente os sons de entrada e saída têm arquivos. Os demais eventos já estão conectados e passam a tocar assim que o MP3 correspondente for adicionado.
+Os sons de entrada, saída, chat e compartilhamento de tela têm arquivos próprios. O som de chat é preparado no gesto de entrada na sala para continuar disponível quando a aba ou janela estiver em segundo plano.

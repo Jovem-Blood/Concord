@@ -11,6 +11,8 @@
 
 - Add message replies with quoted context, authenticated emoji reactions, an emoji
   picker, and compact grouping for consecutive messages from the same participant.
+- Play the chat notification cue when new messages arrive outside the visible,
+  focused chat, including background tabs and minimized desktop windows.
 
 ## 1.0.0
 

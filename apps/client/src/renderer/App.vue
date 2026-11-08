@@ -25,7 +25,7 @@ import { writeClipboard } from './services/clipboard'
 import { RoomSession } from './services/room-session'
 import { emptyChat, type ChatSnapshot } from './services/room-chat'
 import type { ParticipantView, RemoteShareView } from './services/cloudflare/types'
-import { PresenceSoundNotifier, soundPlayer } from './services/sounds'
+import { PresenceSoundNotifier, shouldPlayChatNotification, soundPlayer } from './services/sounds'
 import { serverUrl } from './services/server'
 import { logClient, traceClientOperation } from './services/telemetry'
 import type { AudioLevel } from './services/audio-level'
@@ -157,7 +157,10 @@ roomService.onSnapshot((snapshot) => {
   }
 })
 roomService.onChat((snapshot) => {
-  if (currentRoomCode.value && !snapshot.open && snapshot.notification > chat.value.notification) {
+  if (currentRoomCode.value && shouldPlayChatNotification(chat.value, snapshot, {
+    hidden: document.hidden,
+    focused: document.hasFocus(),
+  })) {
     soundPlayer.play('chat-notification')
   }
   chat.value = snapshot
@@ -184,6 +187,7 @@ roomService.onConnection((state, message) => {
 })
 
 async function joinRoom(roomCode: string): Promise<void> {
+  soundPlayer.prepare('chat-notification')
   const name = displayName.value.trim().normalize('NFC')
   if (!name || name.length > 32) {
     errorMessage.value = 'Use um nome entre 1 e 32 caracteres.'
