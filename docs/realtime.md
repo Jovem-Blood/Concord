@@ -1,4 +1,4 @@
-# Realtime room lifecycle (protocol v2)
+# Realtime room lifecycle (protocol v3)
 
 ## Ownership and transport
 
@@ -8,7 +8,7 @@
 - `apps/client/src/renderer/services/room-session.ts`: the single client controller owns joins, readiness, recovery, credential rotation, the bounded outbox, typing, and departure.
 - The Cloudflare media service receives pushed presence and only performs HTTP SFU operations. It has event-driven reconciliation and failure recovery, not room polling.
 
-The server rejects old joins and retired room/chat APIs with HTTP 426 (`UPDATE_REQUIRED`). Socket handshakes must declare protocol 2. Credentials are sent in the Socket.IO auth payload, not URLs. There is no HTTP long-polling fallback and no Socket.IO packet-recovery store that could retain a deleted conversation.
+The server rejects old joins and retired room/chat APIs with HTTP 426 (`UPDATE_REQUIRED`). Socket handshakes must declare protocol 3. Credentials are sent in the Socket.IO auth payload, not URLs. There is no HTTP long-polling fallback and no Socket.IO packet-recovery store that could retain a deleted conversation.
 
 ## Lifecycle
 
@@ -26,7 +26,7 @@ Independent tabs are independent identities. Display names do not authenticate u
 
 **Zero live sockets means immediate history deletion**, even if identities remain reserved for recovery. This is intentionally stricter than the participant lifecycle. A new conversation gets a new random generation ID; reconnecting clients clear the old transcript and cannot replay its messages.
 
-History is limited to 500 messages of at most 2,000 Unicode characters each, in RAM only. Sync and live delivery have one ordered handoff. The client buffers bounded events arriving during synchronization, deduplicates overlap, and resynchronizes on gaps. Initial history is silent/read; missed remote messages are unread when the chat is closed, but recovery never produces notification sounds.
+History is limited to 500 messages of at most 2,000 Unicode characters each, in RAM only. Replies retain a bounded quote of their target, and reactions are tied to authenticated participant identities. Sync refreshes the bounded transcript so missed reaction changes converge after reconnecting; live delivery still uses the ordered message cursor. The client buffers bounded events arriving during synchronization, deduplicates overlap, and resynchronizes on gaps. Initial history is silent/read; missed remote messages are unread when the chat is closed, but recovery never produces notification sounds.
 
 An API restart clears all state. Clients receive a terminal session response or fail credential validation, stop media, and show **Entrar novamente**. They do not silently recreate the room.
 

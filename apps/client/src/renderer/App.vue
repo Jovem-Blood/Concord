@@ -29,6 +29,7 @@ import { PresenceSoundNotifier, soundPlayer } from './services/sounds'
 import { serverUrl } from './services/server'
 import { logClient, traceClientOperation } from './services/telemetry'
 import type { AudioLevel } from './services/audio-level'
+import type { ReactionEmoji, ReplyReference } from '@concord/protocol'
 
 const roomService = new RoomSession()
 const presenceSounds = new PresenceSoundNotifier()
@@ -291,10 +292,13 @@ async function toggleFullscreen(): Promise<void> {
 }
 
 function onFullscreenChange(): void { fullscreen.value = Boolean(document.fullscreenElement) }
-function sendChat(content: string): void {
+function sendChat(content: string, replyTo?: ReplyReference): void {
   chatError.value = ''
-  if (roomService.sendChat(content)) { if (chatDraft.value === content) chatDraft.value = '' }
+  if (roomService.sendChat(content, replyTo)) { if (chatDraft.value === content) chatDraft.value = '' }
   else chatError.value = 'A mensagem não foi enviada. Aguarde a conexão do chat e tente novamente.'
+}
+function reactChat(messageId: string, emoji: ReactionEmoji): void {
+  chatError.value = roomService.reactChat(messageId, emoji) ? '' : 'A reação não foi enviada. Aguarde a conexão do chat e tente novamente.'
 }
 
 async function copyLink(): Promise<void> {
@@ -610,7 +614,7 @@ onMounted(() => {
           </div>
         </div>
       </section>
-      <ChatPanel v-if="chatOpen" v-model:draft="chatDraft" :chat="chat" :error="chatError" :reconnecting="roomState === 'reconnecting' || roomState === 'joining'" @close="toggleChat" @send="sendChat" @typing="roomService.setTyping($event)" @retry="roomService.retryChat($event)" @dismiss-draft="roomService.dismissDraft($event)" />
+      <ChatPanel v-if="chatOpen" v-model:draft="chatDraft" :chat="chat" :error="chatError" :reconnecting="roomState === 'reconnecting' || roomState === 'joining'" @close="toggleChat" @send="sendChat" @react="reactChat" @typing="roomService.setTyping($event)" @retry="roomService.retryChat($event)" @dismiss-draft="roomService.dismissDraft($event)" />
     </div>
   </div>
 

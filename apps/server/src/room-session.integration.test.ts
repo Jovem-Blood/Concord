@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { io, type Socket } from 'socket.io-client'
-import { SOCKET_PATH, type ClientEvents, type ServerEvents } from '@concord/protocol'
+import { PROTOCOL_VERSION, SOCKET_PATH, type ClientEvents, type ServerEvents } from '@concord/protocol'
 import { buildApp } from './app.js'
 import { RoomSession, type MediaService } from '../../client/src/renderer/services/room-session'
 import type { ChatSnapshot } from '../../client/src/renderer/services/room-chat'
@@ -83,7 +83,7 @@ describe('real Socket.IO room sessions', () => {
     const alice = await participant('Alice')
     const credentials = vi.mocked(alice.media.updateCredentials).mock.calls[0]![0]
     const replacement: Socket<ServerEvents, ClientEvents> = io(address, { path: SOCKET_PATH, transports: ['websocket'], forceNew: true, reconnection: false,
-      auth: { protocol: 2, token: credentials.participantToken } })
+      auth: { protocol: PROTOCOL_VERSION, token: credentials.participantToken } })
     try {
       await new Promise<void>((resolve, reject) => { replacement.once('connect', resolve); replacement.once('connect_error', reject) })
       await vi.waitFor(() => expect(alice.state()).toBe('disconnected'))

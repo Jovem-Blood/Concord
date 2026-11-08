@@ -81,6 +81,7 @@ export function createRealtime(server: HttpServer, rooms: RoomAuthority, allowed
       rooms.remove(member)
     })
     socket.on('chat:send', (input, ack) => handle(ack, () => rooms.send(member, input), 'chat.receive', input?.traceparent))
+    socket.on('chat:react', (input, ack) => handle(ack, () => rooms.react(member, input), 'chat.react'))
     socket.on('chat:typing', (input) => { if (rooms.owns(member, socket.id)) rooms.setTyping(member, input) })
     socket.on('disconnect', () => {
       clearTimeout(syncTimer)

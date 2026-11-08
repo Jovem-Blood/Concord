@@ -3,7 +3,7 @@ import type { Message, SyncState } from '@concord/protocol'
 import { RoomChat } from './room-chat'
 
 const message = (id: string, sequence: number, senderId = 'remote', conversation = 'one'): Message => ({
-  id, sequence, clientSequence: sequence, senderId, senderName: senderId, conversation, type: 'text', content: id, sentAt: sequence,
+  id, sequence, clientSequence: sequence, senderId, senderName: senderId, conversation, type: 'text', content: id, sentAt: sequence, reactions: [],
 })
 const snapshot = (messages: Message[], conversation = 'one'): SyncState => ({ messages, conversation, cursor: messages.length,
   presence: { participants: [], tracks: [] }, typing: [], serverTime: 1, nextClientSequence: 1,
@@ -33,6 +33,16 @@ describe('room chat presentation', () => {
     expect(chat.snapshot.messages).toHaveLength(1)
     expect(chat.snapshot.messages[0]!.status).toBe('sent')
     expect(chat.snapshot.notification).toBe(0)
+  })
+
+  it('merges reaction updates without creating unread messages or duplicate rows', () => {
+    const chat = new RoomChat(() => undefined)
+    const original = message('first', 1)
+    chat.synchronize(snapshot([original]), 'local', true)
+    chat.receive({ ...original, reactions: [{ emoji: '🎉', senders: [{ id: 'local', name: 'Local' }] }] }, 'local')
+    expect(chat.snapshot.messages).toHaveLength(1)
+    expect(chat.snapshot.messages[0]!.reactions[0]!.emoji).toBe('🎉')
+    expect(chat.snapshot).toMatchObject({ unread: 0, notification: 0, localIdentity: 'local' })
   })
 
   it('clears a deleted conversation and preserves only unsent local text as explicit draft recovery', () => {

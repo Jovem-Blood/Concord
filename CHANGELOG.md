@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Breaking changes
+
+- Desktop, web, and API use room protocol 3. Message sync now refreshes the bounded
+  transcript so reaction state remains authoritative after reconnecting.
+
+### Changes
+
+- Add message replies with quoted context, authenticated emoji reactions, an emoji
+  picker, and compact grouping for consecutive messages from the same participant.
+
 ## 1.0.0
 
 ### Breaking changes

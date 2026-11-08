@@ -107,7 +107,7 @@ describe('Cloudflare room signaling', () => {
     const bob = await join('ABCD2345', 'Bob')
     const other = await join('WXYZ2345', 'Other')
     expect((await sync(bob.socket)).messages).toHaveLength(1)
-    expect((await sync(bob.socket, initial.conversation, 1)).messages).toEqual([])
+    expect((await sync(bob.socket, initial.conversation, 1)).messages).toHaveLength(1)
     expect((await sync(other.socket)).messages).toEqual([])
     await app.inject({ method: 'POST', url: '/v1/leave', headers: alice.headers })
     const returning = await join()

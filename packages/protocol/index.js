@@ -1,4 +1,4 @@
-export const PROTOCOL_VERSION = 2
+export const PROTOCOL_VERSION = 3
 export { CLIENT_OPERATIONS, CLIENT_OUTCOMES, CLIENT_REASONS, validTraceparent, diagnosticStack, validClientEvent } from './telemetry.js'
 export const SOCKET_PATH = '/v2/realtime'
 export const RECOVERY_MS = 30_000
@@ -9,6 +9,7 @@ export const RENEW_BEFORE_MS = 5 * 60 * 1000
 export const TYPING_MS = 3_000
 export const MAX_MESSAGES = 500
 export const MAX_CONTENT_LENGTH = 2000
+export const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉']
 
 export function validContent(content) {
   return typeof content === 'string' && content.length <= MAX_CONTENT_LENGTH * 2 &&

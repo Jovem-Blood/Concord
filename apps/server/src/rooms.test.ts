@@ -64,7 +64,7 @@ describe('single room authority', () => {
   it('deletes history at the last socket disconnect, even with identities reserved', () => {
     const { rooms, join, input } = fixture()
     const alice = join()
-    const bob = join()
+    const bob = join('ABCD2345', 'Bob')
     const message = input(alice.member)
     rooms.send(alice.member, message)
     rooms.detach(alice.member, alice.member.socketId!)
@@ -100,6 +100,21 @@ describe('single room authority', () => {
     expect(() => rooms.send(member, { ...request, id: 'different' })).toThrow('MESSAGE_EXPIRED')
   })
 
+  it('preserves reply context and toggles authenticated reactions', () => {
+    const { rooms, join, input } = fixture()
+    const alice = join()
+    const bob = join('ABCD2345', 'Bob')
+    const original = rooms.send(alice.member, input(alice.member, 'original'))
+    const reply = rooms.send(bob.member, { ...input(bob.member, 'reply'), replyToId: original.id })
+    expect(reply.replyTo).toEqual({ id: original.id, senderName: 'Alice', content: 'Hello' })
+    expect(rooms.react(bob.member, { messageId: original.id, emoji: '👍', conversation: original.conversation }).reactions)
+      .toEqual([{ emoji: '👍', senders: [{ id: bob.member.identity, name: 'Bob' }] }])
+    expect(rooms.react(alice.member, { messageId: original.id, emoji: '👍', conversation: original.conversation }).reactions[0]!.senders).toHaveLength(2)
+    expect(rooms.react(bob.member, { messageId: original.id, emoji: '👍', conversation: original.conversation }).reactions[0]!.senders)
+      .toEqual([{ id: alice.member.identity, name: 'Alice' }])
+    expect(() => rooms.react(alice.member, { messageId: original.id, emoji: '🔥', conversation: original.conversation } as never)).toThrow('INVALID_REQUEST')
+  })
+
   it('bounds history and receipt retention without resurrecting evicted messages', () => {
     const { rooms, join, input, advance } = fixture()
     const { member } = join()
@@ -113,7 +128,9 @@ describe('single room authority', () => {
     expect(state.messages).toHaveLength(500)
     expect(state.messages[0]!.sequence).toBe(11)
     expect(() => rooms.send(member, first)).toThrow('MESSAGE_EXPIRED')
-    expect(rooms.sync(member, { conversation: state.conversation, after: 508 }).messages.map((message) => message.sequence)).toEqual([509, 510])
+    const refreshed = rooms.sync(member, { conversation: state.conversation, after: 508 }).messages
+    expect(refreshed).toHaveLength(500)
+    expect(refreshed.slice(-2).map((message) => message.sequence)).toEqual([509, 510])
   })
 
   it('validates content and rate-limits accepted messages without rate-limiting retries', () => {

@@ -3,9 +3,9 @@ import { MAX_MESSAGES, type ErrorCode, type Message, type SyncState, type Typist
 export type ChatMessage = Omit<Message, 'sequence'> & { sequence?: number; status: 'pending' | 'sent' | 'failed'; failure?: ErrorCode }
 export type ChatSnapshot = {
   messages: ChatMessage[]; unread: number; open: boolean; ready: boolean; typing: Typist[]
-  conversation: string; notification: number; drafts: { id: string; content: string; senderId: string }[]
+  conversation: string; notification: number; localIdentity: string; drafts: { id: string; content: string; senderId: string }[]
 }
-export const emptyChat = (): ChatSnapshot => ({ messages: [], unread: 0, open: false, ready: false, typing: [], conversation: '', notification: 0, drafts: [] })
+export const emptyChat = (): ChatSnapshot => ({ messages: [], unread: 0, open: false, ready: false, typing: [], conversation: '', notification: 0, localIdentity: '', drafts: [] })
 
 export class RoomChat {
   private state = emptyChat()
@@ -21,6 +21,7 @@ export class RoomChat {
   restoreDrafts(drafts: ChatSnapshot['drafts']): void { this.state.drafts = drafts.slice(-20); this.emit() }
 
   synchronize(state: SyncState, localIdentity: string, initial: boolean): boolean {
+    this.state.localIdentity = localIdentity
     const reset = this.state.conversation !== state.conversation
     if (reset) {
       this.state.drafts = [...this.state.drafts, ...this.unsentDrafts()].slice(-20)

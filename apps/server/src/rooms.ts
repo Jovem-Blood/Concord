@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import { MAX_MESSAGES, RECOVERY_MS, TOKEN_MS, TYPING_MS, validContent,
-  type Credentials, type ErrorCode, type MediaSource, type Message, type Presence, type SendMessage, type SyncRequest, type SyncState, type Typist } from '@concord/protocol'
+import { MAX_MESSAGES, REACTION_EMOJIS, RECOVERY_MS, TOKEN_MS, TYPING_MS, validContent,
+  type Credentials, type ErrorCode, type MediaSource, type Message, type Presence, type ReactMessage, type SendMessage, type SyncRequest, type SyncState, type Typist } from '@concord/protocol'
 
 type Publication = { mid: string; trackName: string; kind: 'video' | 'audio'; source: MediaSource }
 export type Participant = {
@@ -95,7 +95,7 @@ export class RoomAuthority {
     this.prepareSequence(member, chat.id)
     member.ready = true
     return { presence: this.presence(member.roomCode), conversation: chat.id, cursor: chat.cursor,
-      messages: request.conversation === chat.id ? chat.messages.filter((message) => message.sequence > request.after) : [...chat.messages],
+      messages: [...chat.messages],
       typing: this.typing(member.roomCode), serverTime: this.now(), credentials: member.pendingCredentials ?? member.credentials,
       nextClientSequence: member.highWater + 1 }
   }
@@ -104,14 +104,15 @@ export class RoomAuthority {
     if (!member.ready) throw new RoomError('NOT_READY')
     if (!record(input) || typeof input.id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(input.id) || !validContent(input.content) ||
       typeof input.conversation !== 'string' || !Number.isSafeInteger(input.clientSequence) || input.clientSequence < 1 ||
-      Object.keys(input).some((key) => !['id', 'content', 'conversation', 'clientSequence', 'traceparent'].includes(key))) throw new RoomError('INVALID_REQUEST')
+      (input.replyToId !== undefined && (typeof input.replyToId !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(input.replyToId))) ||
+      Object.keys(input).some((key) => !['id', 'content', 'conversation', 'clientSequence', 'replyToId', 'traceparent'].includes(key))) throw new RoomError('INVALID_REQUEST')
     const chat = this.conversation(member.roomCode)
     if (input.conversation !== chat.id) throw new RoomError('CONVERSATION_RESET')
     this.pruneReceipts(chat)
     const key = `${member.identity}:${input.id}`
     const existing = chat.receipts.get(key) ?? chat.messages.find((message) => message.senderId === member.identity && message.id === input.id)
     if (existing) {
-      if (existing.content !== input.content || existing.clientSequence !== input.clientSequence) throw new RoomError('INVALID_REQUEST')
+      if (existing.content !== input.content || existing.clientSequence !== input.clientSequence || existing.replyTo?.id !== input.replyToId) throw new RoomError('INVALID_REQUEST')
       return existing
     }
     this.prepareSequence(member, chat.id)
@@ -121,9 +122,12 @@ export class RoomAuthority {
     if (member.chatSentAt.length >= 5) throw new RoomError('RATE_LIMITED', 429)
     member.chatSentAt.push(this.now())
     member.highWater = input.clientSequence
+    const reply = input.replyToId ? chat.messages.find((message) => message.id === input.replyToId) : undefined
+    if (input.replyToId && !reply) throw new RoomError('INVALID_REQUEST')
     const message: Message = { id: input.id, content: input.content, conversation: input.conversation,
       clientSequence: input.clientSequence, type: 'text', senderId: member.identity,
-      senderName: member.name, sentAt: this.now(), sequence: ++chat.cursor }
+      senderName: member.name, sentAt: this.now(), sequence: ++chat.cursor, reactions: [],
+      ...(reply ? { replyTo: { id: reply.id, senderName: reply.senderName, content: reply.content } } : {}) }
     chat.messages.push(message)
     if (chat.messages.length > MAX_MESSAGES) chat.messages.shift()
     chat.receipts.set(key, message)
@@ -131,6 +135,27 @@ export class RoomAuthority {
     member.typingUntil = 0
     this.onMessage(member.roomCode, message)
     this.typingChanged(member.roomCode)
+    return message
+  }
+
+  react(member: Participant, input: ReactMessage): Message {
+    if (!member.ready || !record(input) || typeof input.messageId !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(input.messageId) ||
+      typeof input.conversation !== 'string' || !REACTION_EMOJIS.includes(input.emoji) ||
+      Object.keys(input).some((key) => !['messageId', 'emoji', 'conversation'].includes(key))) throw new RoomError('INVALID_REQUEST')
+    const chat = this.conversation(member.roomCode)
+    if (input.conversation !== chat.id) throw new RoomError('CONVERSATION_RESET')
+    const message = chat.messages.find((item) => item.id === input.messageId)
+    if (!message) throw new RoomError('INVALID_REQUEST')
+    const reactions = message.reactions.map((reaction) => ({ ...reaction, senders: [...reaction.senders] }))
+    const index = reactions.findIndex((reaction) => reaction.emoji === input.emoji)
+    const reaction = index >= 0 ? reactions[index]! : { emoji: input.emoji, senders: [] }
+    const senderIndex = reaction.senders.findIndex((sender) => sender.id === member.identity)
+    if (senderIndex >= 0) reaction.senders.splice(senderIndex, 1)
+    else reaction.senders.push({ id: member.identity, name: member.name })
+    if (index < 0 && reaction.senders.length) reactions.push(reaction)
+    else if (!reaction.senders.length) reactions.splice(index, 1)
+    message.reactions = reactions
+    this.onMessage(member.roomCode, message)
     return message
   }
 

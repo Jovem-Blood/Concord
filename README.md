@@ -73,7 +73,7 @@ Cloudflare provides media sessions and tracks—not Concord rooms. One server `R
 
 Participant credentials rotate automatically before their two-hour expiry. Unexpected connection loss reserves the participant's identity and room slot for 30 seconds after detection (heartbeats take approximately 15 seconds to detect a silent failure). Working media continues during recovery, then stops if recovery expires. Refresh/Leave requires an explicit rejoin. A disconnected last participant does **not** preserve history during the recovery window: their next connection starts a new conversation. Run a single API instance; an API restart clears rooms and requires rejoining.
 
-See [Realtime lifecycle and deployment](docs/realtime.md) for protocol, retry, Cloudflare Tunnel, and rollout details. Protocol v2 requires updating the server and all clients together.
+See [Realtime lifecycle and deployment](docs/realtime.md) for protocol, retry, Cloudflare Tunnel, and rollout details. Protocol v3 requires updating the server and all clients together.
 
 ## Quick start
 
@@ -178,7 +178,7 @@ CI runs type checks, tests, lint, web/server builds, and Docker builds on pushes
 to `main` and pull requests. Deployment to the self-hosted machine is manual.
 The download reflects the latest tagged release; `main` may include newer work.
 
-Version **1.0.0** introduces a compatibility break with the previous release: desktop, web, and API must use room protocol 2. Older clients receive an update-required response from the API. See [release notes](CHANGELOG.md) for changes and known limitations.
+Desktop, web, and API must use room protocol 3, which adds replies and authenticated message reactions. Older clients receive an update-required response from the API. See [release notes](CHANGELOG.md) for changes and known limitations.
 
 SemVer tags such as `v1.0.0` trigger `.github/workflows/release.yml`. The tag must match `apps/client/package.json` and point to a commit contained in `main`. The workflow verifies the project, builds Windows and Linux artifacts, generates SHA-256 checksums, and publishes a GitHub Release.
 

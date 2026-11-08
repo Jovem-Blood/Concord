@@ -73,7 +73,7 @@ A Cloudflare fornece sessões de mídia e faixas — não as salas do Concord. U
 
 As credenciais são renovadas automaticamente antes de expirar em duas horas. Uma queda inesperada reserva a identidade e a vaga por 30 segundos após a detecção (até aproximadamente 15 segundos de heartbeat para detectar uma falha silenciosa). A mídia continua durante a recuperação e para se o prazo expirar. Recarregar/sair exige entrar novamente. A última conexão cair apaga o histórico imediatamente, mesmo durante a reserva de reconexão. Execute uma única instância da API; reiniciá-la apaga as salas e exige entrar novamente.
 
-Consulte [Ciclo de vida e implantação em tempo real](docs/realtime.md) para detalhes do protocolo, reenvio e Cloudflare Tunnel. O protocolo v2 exige atualizar servidor e clientes juntos.
+Consulte [Ciclo de vida e implantação em tempo real](docs/realtime.md) para detalhes do protocolo, reenvio e Cloudflare Tunnel. O protocolo v3 exige atualizar servidor e clientes juntos.
 
 ## Início rápido
 
@@ -179,7 +179,7 @@ em pushes para `main` e pull requests. O deploy na máquina auto-hospedada é ma
 O download corresponde à última release com tag; a `main` pode conter trabalho
 mais recente.
 
-A versão **1.0.0** quebra compatibilidade com a release anterior: desktop, web e API precisam usar o protocolo de sala 2. Clientes antigos recebem da API uma resposta exigindo atualização. Veja as [notas da versão](CHANGELOG.md) para mudanças e limitações conhecidas.
+Desktop, web e API precisam usar o protocolo de sala 3, que adiciona respostas e reações autenticadas às mensagens. Clientes antigos recebem da API uma resposta exigindo atualização. Veja as [notas da versão](CHANGELOG.md) para mudanças e limitações conhecidas.
 
 Tags SemVer como `v1.0.0` executam `.github/workflows/release.yml`. A tag deve corresponder a `apps/client/package.json` e apontar para um commit presente em `main`. O workflow verifica o projeto, cria os artefatos de Windows e Linux, gera checksums SHA-256 e publica uma GitHub Release.
 

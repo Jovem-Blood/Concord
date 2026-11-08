@@ -1,6 +1,6 @@
 import { io, type Socket } from 'socket.io-client'
 import { ACK_MS, PROTOCOL_VERSION, RECOVERY_MS, RENEW_BEFORE_MS, RETRY_MS, SOCKET_PATH, TYPING_MS, validContent,
-  type ClientEvents, type Credentials, type ErrorCode, type Message, type Presence, type Result, type SendMessage, type ServerEvents, type SyncState } from '@concord/protocol'
+  type ClientEvents, type Credentials, type ErrorCode, type Message, type Presence, type ReactionEmoji, type ReplyReference, type Result, type SendMessage, type ServerEvents, type SyncState } from '@concord/protocol'
 import type { CaptureResolution } from '../../shared/capture'
 import { CloudflareRoomService } from './cloudflare/room'
 import type { RoomSnapshot } from './cloudflare/types'
@@ -239,10 +239,12 @@ export class RoomSession {
     }
   }
 
-  sendChat(content: string): boolean {
+  sendChat(content: string, replyTo?: ReplyReference): boolean {
     if (!this.ready() || !validContent(content) || this.pending.size >= 20) return false
-    const input: SendMessage = { id: crypto.randomUUID(), content, conversation: this.conversation, clientSequence: this.nextSequence++ }
-    this.chat.pending({ ...input, type: 'text', senderId: this.credentials!.identity, senderName: this.name, sentAt: Date.now() })
+    const input: SendMessage = { id: crypto.randomUUID(), content, conversation: this.conversation, clientSequence: this.nextSequence++,
+      ...(replyTo ? { replyToId: replyTo.id } : {}) }
+    this.chat.pending({ ...input, type: 'text', senderId: this.credentials!.identity, senderName: this.name, sentAt: Date.now(),
+      reactions: [], ...(replyTo ? { replyTo } : {}) })
     this.enqueueMessage(input)
     this.setTyping(false)
     return true
@@ -252,9 +254,23 @@ export class RoomSession {
     const message = this.chat.snapshot.messages.find((item) => item.id === id && item.senderId === this.credentials?.identity)
     if (!this.ready() || !message || message.status !== 'failed' || message.conversation !== this.conversation || message.failure === 'MESSAGE_EXPIRED') return
     this.chat.status(id, 'pending')
-    this.enqueueMessage({ id: message.id, content: message.content, conversation: message.conversation, clientSequence: message.clientSequence })
+    this.enqueueMessage({ id: message.id, content: message.content, conversation: message.conversation,
+      clientSequence: message.clientSequence, ...(message.replyTo ? { replyToId: message.replyTo.id } : {}) })
   }
   dismissDraft(id: string): void { this.chat.dismissDraft(id) }
+
+  reactChat(messageId: string, emoji: ReactionEmoji): boolean {
+    if (!this.ready()) return false
+    const generation = this.generation
+    const connection = this.connectionGeneration
+    void this.socket!.timeout(ACK_MS).emitWithAck('chat:react', { messageId, emoji, conversation: this.conversation }).then((result) => {
+      if (!this.current(generation, connection)) return
+      if (result.ok) this.accept(result.value, false)
+      else if (result.code === 'CONVERSATION_RESET') void this.synchronize()
+      else logClient('warn', 'chat.react.rejected', { code: result.code })
+    }).catch((error: unknown) => logClient('warn', 'chat.react.failed', { error }))
+    return true
+  }
 
   private enqueueMessage(input: SendMessage): void {
     const operation = startClientOperation('chat.send')

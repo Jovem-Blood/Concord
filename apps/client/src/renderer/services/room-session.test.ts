@@ -12,7 +12,7 @@ function state(conversation = 'one', messages: Message[] = []): SyncState {
     serverTime: Date.now(), nextClientSequence: 1 }
 }
 function accepted(input: SendMessage, sequence = 1): Message {
-  return { ...input, sequence, type: 'text', sentAt: Date.now(), senderId: 'local', senderName: 'Local' }
+  return { ...input, sequence, type: 'text', sentAt: Date.now(), senderId: 'local', senderName: 'Local', reactions: [] }
 }
 
 class FakeSocket {
