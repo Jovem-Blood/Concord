@@ -22,6 +22,7 @@ export function useVoice(room: RoomSession) {
   const monitor = new SpeakingMonitor((id, active) => { speaking.value = { ...speaking.value, [id]: active } })
   const microphone = new MicrophoneService(room, (state, track, pending) => {
     voice.value = state; localTrack.value = track; busy.value = pending
+    room.setVoiceMuted(!state.joined || state.muted)
     if (state.muted) speaking.value = { ...speaking.value, local: false }
   }, (message) => { notice.value = message })
   watch([localTrack, remoteTracks], () => {
@@ -70,6 +71,7 @@ export function useVoice(room: RoomSession) {
   onBeforeUnmount(() => { reset(); navigator.mediaDevices?.removeEventListener('devicechange', refreshDevices) })
   return { voice, busy, notice, remoteTracks, speaking, microphoneVolume, outputVolume, setMicrophoneVolume,
     inputDeviceId, outputDeviceId, inputDevices, outputDevices, outputSelectionSupported, refreshDevices, setInputDevice, setOutputDevice,
+    prepareMicrophone: () => microphone.prepare(),
     toggleMicrophone, toggleDeafen: () => microphone.toggleDeafen(),
     resumeAudio: () => monitor.resume(), reset }
 }

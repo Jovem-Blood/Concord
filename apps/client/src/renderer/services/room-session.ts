@@ -4,6 +4,7 @@ import { ACK_MS, PROTOCOL_VERSION, RECOVERY_MS, RENEW_BEFORE_MS, RETRY_MS, SOCKE
 import type { CaptureResolution } from '../../shared/capture'
 import { CloudflareRoomService } from './cloudflare/room'
 import type { RoomSnapshot } from './cloudflare/types'
+import type { VideoLayer } from './cloudflare/quality'
 import { RoomChat, type ChatSnapshot } from './room-chat'
 import { requestJoinToken, serverUrl } from './server'
 import { logClient, startClientOperation, traceClientOperation, type ClientOperation } from './telemetry'
@@ -11,7 +12,7 @@ import { logClient, startClientOperation, traceClientOperation, type ClientOpera
 type State = 'joining' | 'connected' | 'reconnecting' | 'disconnected'
 type RoomSocket = Socket<ServerEvents, ClientEvents>
 type Outgoing = { input: SendMessage; deadline: number; inFlight: boolean; operation: ClientOperation; timer?: ReturnType<typeof setTimeout> }
-export type MediaService = Pick<CloudflareRoomService, 'connect' | 'disconnect' | 'updateCredentials' | 'setSignalingAvailable' | 'updatePresence' | 'onSnapshot' | 'onConnection' | 'publishScreen' | 'unpublishScreen' | 'publishMicrophone' | 'unpublishMicrophone' | 'pauseShare' | 'resumeShare'>
+export type MediaService = Pick<CloudflareRoomService, 'connect' | 'disconnect' | 'updateCredentials' | 'setSignalingAvailable' | 'updatePresence' | 'onSnapshot' | 'onConnection' | 'publishScreen' | 'unpublishScreen' | 'publishMicrophone' | 'unpublishMicrophone' | 'pauseShare' | 'resumeShare'> & Partial<Pick<CloudflareRoomService, 'setVideoLayer' | 'getDiagnostics'>>
 
 const explanations: Record<ErrorCode, string> = {
   UPDATE_REQUIRED: 'Atualize o Concord para entrar nesta sala.',
@@ -29,6 +30,12 @@ export class RoomSession {
   private generation = 0
   private connectionGeneration = 0
   private state: State = 'disconnected'
+  private voiceMuted = true
+  setVoiceMuted(muted: boolean): void {
+    if (this.voiceMuted === muted) return
+    this.voiceMuted = muted
+    if (this.ready()) this.socket!.emit('voice:state', { muted })
+  }
   private name = ''
   private roomCode = ''
   private cursor = 0
@@ -204,6 +211,7 @@ export class RoomSession {
       this.chat.setReady(true)
       this.media.setSignalingAvailable(true)
       this.connection('connected')
+      socket.emit('voice:state', { muted: this.voiceMuted })
       this.joined?.resolve(); this.joined = undefined
       this.pump()
       this.scheduleRenewal()
@@ -440,5 +448,7 @@ export class RoomSession {
   }
   unpublishMicrophone(): Promise<void> { return this.media.unpublishMicrophone() }
   pauseShare(key: string): Promise<void> { return this.media.pauseShare(key) }
+  setVideoLayer(key: string, layer: VideoLayer): void { this.media.setVideoLayer?.(key, layer) }
+  getDiagnostics() { return this.media.getDiagnostics?.() }
   resumeShare(key: string): Promise<void> { return this.media.resumeShare(key) }
 }

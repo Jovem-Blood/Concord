@@ -15,7 +15,7 @@ export function validContent(content: unknown): content is string
 export type Credentials = { participantToken: string; identity: string; expiresAt: number }
 export type MediaSource = 'microphone' | 'screen-video' | 'screen-audio'
 export type ParticipantPresence = { identity: string; name: string; connection: 'connected' | 'reconnecting'; voice: { available: boolean; muted?: boolean } }
-export type PublishedTrack = { participantIdentity: string; participantName: string; sessionId: string; trackName: string; kind: 'audio' | 'video'; source: MediaSource }
+export type PublishedTrack = { participantIdentity: string; participantName: string; sessionId: string; trackName: string; kind: 'audio' | 'video'; source: MediaSource; simulcast?: boolean }
 export type Presence = { participants: ParticipantPresence[]; tracks: PublishedTrack[] }
 export type ReactionEmoji = '👍' | '❤️' | '😂' | '😮' | '😢' | '🎉'
 export type MessageReaction = { emoji: ReactionEmoji; senders: { id: string; name: string }[] }
@@ -30,6 +30,7 @@ export type ErrorCode = 'UPDATE_REQUIRED' | 'SESSION_ENDED' | 'REPLACED' | 'CONV
 export type Result<T> = { ok: true; value: T } | { ok: false; code: ErrorCode }
 export type Ack<T> = (result: Result<T>) => void
 export interface ClientEvents {
+  'voice:state': (input: { muted: boolean }) => void
   'session:sync': (request: SyncRequest, ack: Ack<SyncState>) => void
   'session:renew': (ack: Ack<Credentials>) => void
   'session:confirm': (token: string, ack: Ack<null>) => void

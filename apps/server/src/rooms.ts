@@ -2,11 +2,12 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { MAX_MESSAGES, REACTION_EMOJIS, RECOVERY_MS, TOKEN_MS, TYPING_MS, validContent,
   type Credentials, type ErrorCode, type MediaSource, type Message, type Presence, type ReactMessage, type SendMessage, type SyncRequest, type SyncState, type Typist } from '@concord/protocol'
 
-type Publication = { mid: string; trackName: string; kind: 'video' | 'audio'; source: MediaSource }
+type Publication = { mid: string; trackName: string; kind: 'video' | 'audio'; source: MediaSource; simulcast?: boolean }
 export type Participant = {
   identity: string; name: string; roomCode: string; expiresAt: number
   credentials: Credentials; pendingCredentials?: Credentials; tokens: Set<string>
   socketId?: string; joined: boolean; recoveryUntil: number; ready: boolean
+  voiceMuted?: boolean
   sessionId?: string; transportChannelId?: number; published: Map<string, Publication>; mids: Set<string>; busy: boolean
   chatSentAt: number[]; typingAt: number; typingUntil: number
   sequenceConversation: string; highWater: number
@@ -206,10 +207,12 @@ export class RoomAuthority {
     return {
       participants: members.map((member) => ({ identity: member.identity, name: member.name,
         connection: member.socketId ? 'connected' : 'reconnecting',
-        voice: { available: [...member.published.values()].some((track) => track.source === 'microphone') } })),
+        voice: { available: [...member.published.values()].some((track) => track.source === 'microphone'),
+          ...(member.voiceMuted === undefined ? {} : { muted: member.voiceMuted }) } })),
       tracks: members.flatMap((member) => [...member.published.values()].map((track) => ({
         participantIdentity: member.identity, participantName: member.name, sessionId: member.sessionId!,
         trackName: track.trackName, kind: track.kind, source: track.source,
+        ...(track.simulcast ? { simulcast: true } : {}),
       }))),
     }
   }

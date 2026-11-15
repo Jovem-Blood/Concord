@@ -14,6 +14,7 @@ export type SfuTrack = {
   sessionId?: string
   trackName?: string
   kind?: 'audio' | 'video'
+  simulcast?: { preferredRid: string; priorityOrdering: 'asciibetical'; ridNotAvailable: 'asciibetical' }
   errorCode?: string
 }
 export type SfuResponse = {
@@ -29,7 +30,7 @@ export type SfuDataChannel = {
 }
 export type SfuClient = {
   createSession(): Promise<SfuResponse>
-  request(sessionId: string, operation: 'tracks/new' | 'tracks/close' | 'renegotiate' | 'datachannels/establish' | 'datachannels/new' | 'datachannels/close', body: unknown): Promise<SfuResponse>
+  request(sessionId: string, operation: 'tracks/new' | 'tracks/update' | 'tracks/close' | 'renegotiate' | 'datachannels/establish' | 'datachannels/new' | 'datachannels/close', body: unknown): Promise<SfuResponse>
 }
 
 export function createSfuClient(

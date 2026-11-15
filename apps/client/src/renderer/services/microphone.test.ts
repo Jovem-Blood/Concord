@@ -23,6 +23,45 @@ beforeEach(() => {
 })
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 describe('microphone lifecycle', () => {
+  it('prepares once while muted and unmutes without capture or publication work', async () => {
+    const track = new Track()
+    const getUserMedia = vi.fn(async () => ({ getAudioTracks: () => [track], getTracks: () => [track] }))
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } })
+    const publisher = { publishMicrophone: vi.fn(async (output: MediaStreamTrack) => {
+      expect(track.enabled).toBe(false)
+      expect(output.enabled).toBe(false)
+    }), unpublishMicrophone: vi.fn(async () => undefined) }
+    const changed = vi.fn()
+    const service = new MicrophoneService(publisher, changed, vi.fn())
+    const pending = service.prepare()
+    await service.prepare()
+    await pending
+    await service.prepare()
+    expect(changed).toHaveBeenLastCalledWith(expect.objectContaining({ joined: true, muted: true }), contexts[0]!.output, false)
+    expect(track.enabled).toBe(false)
+    expect(contexts[0]!.output.enabled).toBe(false)
+    await service.toggle()
+    expect(track.enabled).toBe(true)
+    expect(contexts[0]!.output.enabled).toBe(true)
+    expect(getUserMedia).toHaveBeenCalledOnce()
+    expect(publisher.publishMicrophone).toHaveBeenCalledOnce()
+    service.reset()
+  })
+  it('handles denied preparation without rejecting room entry and allows manual retry', async () => {
+    const track = new Track()
+    const getUserMedia = vi.fn().mockRejectedValueOnce(new DOMException('Denied', 'NotAllowedError'))
+      .mockResolvedValueOnce({ getAudioTracks: () => [track], getTracks: () => [track] })
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } })
+    const publisher = { publishMicrophone: vi.fn(async () => undefined), unpublishMicrophone: vi.fn(async () => undefined) }
+    const error = vi.fn()
+    const service = new MicrophoneService(publisher, vi.fn(), error)
+    await expect(service.prepare()).resolves.toBeUndefined()
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('não autorizado'))
+    expect(publisher.publishMicrophone).not.toHaveBeenCalled()
+    await service.toggle()
+    expect(track.enabled).toBe(true)
+    service.reset()
+  })
   it('reports publication failures separately from microphone access failures and permits retry', async () => {
     const track = new Track()
     const replacement = new Track()
@@ -95,7 +134,7 @@ describe('microphone lifecycle', () => {
     vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } })
     const publisher = { publishMicrophone: vi.fn(async () => undefined), unpublishMicrophone: vi.fn(async () => undefined) }
     const service = new MicrophoneService(publisher, vi.fn(), vi.fn())
-    const pending = service.toggle()
+    const pending = service.prepare()
     service.reset()
     resolve({ getAudioTracks: () => [track], getTracks: () => [track] })
     await pending

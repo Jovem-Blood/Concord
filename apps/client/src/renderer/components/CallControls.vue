@@ -18,7 +18,7 @@ const emit = defineEmits<{
       <template #default="{ open, menuId }">
         <button
           class="call-control" :class="{ active: voice.joined && !voice.muted }" :disabled="(!connected && !voice.joined) || voiceBusy"
-          :aria-busy="voiceBusy" :aria-pressed="voice.joined && !voice.muted" :aria-label="voiceBusy ? 'Ativando microfone…' : voice.joined && !voice.muted ? 'Silenciar microfone' : 'Ativar microfone'"
+          :aria-busy="voiceBusy" :aria-pressed="voice.joined && !voice.muted" :aria-label="voiceBusy ? 'Preparando microfone…' : voice.joined && !voice.muted ? 'Silenciar microfone' : 'Ativar microfone'"
           :aria-expanded="open" :aria-controls="menuId" aria-haspopup="dialog" @click="emit('microphone')"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" /><path v-if="voice.muted" d="m3 3 18 18" /></svg>

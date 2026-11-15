@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.1.0
+
 ### Breaking changes
 
 - Desktop, web, and API use room protocol 3. Message sync now refreshes the bounded
@@ -13,6 +15,25 @@
   picker, and compact grouping for consecutive messages from the same participant.
 - Play the chat notification cue when new messages arrive outside the visible,
   focused chat, including background tabs and minimized desktop windows.
+- Prepare the microphone muted when joining, so subsequent unmute does not need
+  a new publication. Synchronize mute indicators between participants.
+- Add three simulcast layers capped at the selected 720p or 1080p quality, with
+  receiver layer selection based on tile size and visibility.
+- Preserve active media on rejected subscriptions and recover partial subscriptions
+  without unnecessary connection resets.
+- Export local media diagnostics with Ctrl+Shift+D inside a room.
+- Add optional OpenTelemetry instrumentation and a Grafana reference stack.
+
+### Known limitations
+
+- Update the API alongside clients: this release uses room protocol 3.
+- Synthetic browser tests exercised two simultaneous streams against the SFU.
+  Restoration to the highest layer, audible microphone delivery, separate devices
+  and networks, native capture, and installed-app updates remain unverified.
+- Simulcast caps quality, not total Cloudflare usage or billing. TURN configuration
+  is still required for networks that need a relay.
+- Windows artifacts are unsigned. Portable ZIP builds do not self-update.
+- See `docs/audit/media-2026-11-15.md` for test evidence and remaining checks.
 
 ## 1.0.0
 

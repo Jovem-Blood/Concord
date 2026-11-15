@@ -5,9 +5,11 @@ import type { MediaSource, PublishedTrack, RemoteShareView, RemoteVoiceTrack, Ro
 import { logClient, startClientOperation, traceClientOperation, type ClientOperation } from '../telemetry'
 import type { ClientOperationName } from '@concord/protocol'
 import { waitForIceGathering } from './ice'
+import { MediaDiagnostics } from './diagnostics'
+import { screenEncodings, type VideoLayer } from './quality'
 
 type ConnectionState = 'connected' | 'reconnecting' | 'disconnected'
-type Subscription = { source: PublishedTrack; mid: string }
+type Subscription = { source: PublishedTrack; mid: string; layer?: VideoLayer }
 const trackKey = (track: PublishedTrack) => `${track.sessionId}:${track.trackName}`
 
 export class SignalingError extends Error {
@@ -20,6 +22,8 @@ export class SignalingError extends Error {
 const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.cloudflare.com:3478' }]
 
 export class CloudflareRoomService {
+  private readonly diagnostics = new MediaDiagnostics()
+  getDiagnostics() { return this.diagnostics.snapshot(this.pc) }
   private credentials: JoinResponse | null = null
   private pc: RTCPeerConnection | null = null
   private transportChannel: RTCDataChannel | null = null
@@ -43,15 +47,26 @@ export class CloudflareRoomService {
   private failures = 0
   private connectionState: ConnectionState | null = null
   private pausedShares = new Set<string>()
+  private videoLayers = new Map<string, VideoLayer>()
+  setVideoLayer(shareKey: string, layer: VideoLayer): void {
+    if (this.videoLayers.get(shareKey) === layer) return
+    this.videoLayers.set(shareKey, layer)
+    this.presenceRevision++
+    this.reconcile()
+  }
+  private videoLayer(source: PublishedTrack): VideoLayer {
+    return this.videoLayers.get(`${source.participantIdentity}:${source.sessionId}`) ?? 'f'
+  }
   private iceServers: RTCIceServer[] = ICE_SERVERS
   private operation?: ClientOperation
 
   private async observe<T>(name: ClientOperationName, action: () => Promise<T>, parent = this.operation?.traceparent): Promise<T> {
     const previous = this.operation
     const operation = startClientOperation(name, parent)
+    const started = performance.now()
     this.operation = operation
-    try { const result = await action(); operation.end(); return result }
-    catch (error) { operation.end(error); throw error }
+    try { const result = await action(); operation.end(); this.diagnostics.record(name, performance.now() - started, 'success'); return result }
+    catch (error) { operation.end(error); this.diagnostics.record(name, performance.now() - started, 'error'); throw error }
     finally { this.operation = previous }
   }
 
@@ -186,6 +201,7 @@ export class CloudflareRoomService {
     this.disposePeer()
     this.presence = { participants: [], tracks: [] }
     this.pausedShares.clear()
+    this.videoLayers.clear()
     this.iceServers = ICE_SERVERS
     this.emitSnapshot()
     await this.queue.catch((error: unknown) => {
@@ -195,8 +211,10 @@ export class CloudflareRoomService {
 
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
     const generation = this.generation
+    const queued = performance.now()
     const result = this.queue.then(() => {
       if (generation !== this.generation) throw new DOMException('Session changed', 'AbortError')
+      this.diagnostics.record('queue.wait', performance.now() - queued)
       return operation()
     })
     this.queue = result.catch(() => undefined)
@@ -204,7 +222,8 @@ export class CloudflareRoomService {
   }
 
   private async api<T>(path: string, body?: unknown): Promise<T> {
-    return traceClientOperation('sfu.signal', async (operation) => {
+    const started = performance.now()
+    try { return await traceClientOperation('sfu.signal', async (operation) => {
       const credentials = this.credentials
       const generation = this.generation
       if (!credentials) throw new SignalingError(401)
@@ -222,7 +241,9 @@ export class CloudflareRoomService {
       const result = await response.json() as T
       if (generation !== this.generation) throw new DOMException('Session changed', 'AbortError')
       return result
-    }, this.operation?.traceparent)
+    }, this.operation?.traceparent) } finally {
+      this.diagnostics.record(`signal.${path}`, performance.now() - started)
+    }
   }
 
   private ensurePeer(): Promise<RTCPeerConnection> {
@@ -316,8 +337,7 @@ export class CloudflareRoomService {
     for (const { track, source, stream: mediaStream } of tracks) {
       const transceiver = pc.addTransceiver(track, {
       direction: 'sendonly', ...(mediaStream ? { streams: [mediaStream] } : {}),
-      sendEncodings: [{ maxBitrate: source === 'microphone' ? 64_000 : track.kind === 'audio' ? 128_000 : this.resolution === '720p' ? 3_000_000 : 5_000_000,
-        ...(track.kind === 'video' ? { maxFramerate: 30 } : {}) }],
+      sendEncodings: track.kind === 'video' ? screenEncodings(this.resolution) : [{ maxBitrate: source === 'microphone' ? 64_000 : 128_000 }],
       })
       // Prefer Opus for speech without rewriting negotiated SDP.
       if (source === 'microphone' && typeof RTCRtpSender !== 'undefined') {
@@ -376,7 +396,7 @@ export class CloudflareRoomService {
       // Even a partial closure can return a valid answer that must be applied.
       await this.negotiate({ ...result, tracks: undefined }, pc)
       if (!result.sessionDescription) throw new Error('Missing track closure answer')
-      if (result.tracks?.some((track) => track.errorCode)) throw new Error('Could not close tracks')
+      if (result.tracks?.some((track) => track.errorCode && track.errorCode !== 'close_track_error')) throw new Error('Could not close tracks')
     } catch (error) {
       this.needsReset = true
       throw error
@@ -412,18 +432,25 @@ export class CloudflareRoomService {
     const added = wanted.filter((t) => !this.subscriptions.has(trackKey(t)))
     for (let offset = 0; offset < added.length; offset += 32) {
       const batch = added.slice(offset, offset + 32)
+      const requestedLayers = new Map(batch.map((source) => [trackKey(source), this.videoLayer(source)]))
       const pc = await this.ensurePeer()
       await this.observe('media.subscribe', async () => {
+        let negotiated = false
         try {
           const result = await this.api<SfuResponse>('tracks', {
-            tracks: batch.map((t) => ({ location: 'remote', sessionId: t.sessionId, trackName: t.trackName })),
+            tracks: batch.map((t) => ({ location: 'remote', sessionId: t.sessionId, trackName: t.trackName,
+              ...(t.simulcast ? { preferredRid: requestedLayers.get(trackKey(t)) } : {}) })),
           })
           // ontrack may fire during setRemoteDescription, so register mids before negotiation.
           for (const track of result.tracks ?? []) {
             const source = batch.find((t) => t.sessionId === track.sessionId && t.trackName === track.trackName)
-            if (source && track.mid && !track.errorCode) this.subscriptions.set(trackKey(source), { source, mid: track.mid })
+            if (source && track.mid && !track.errorCode) this.subscriptions.set(trackKey(source), { source, mid: track.mid,
+              ...(source.simulcast ? { layer: requestedLayers.get(trackKey(source)) } : {}) })
           }
-          await this.negotiate(result, pc)
+          // Partial track failures can accompany a valid offer for successful tracks.
+          // Complete that exchange before retrying only the missing subscriptions.
+          await this.negotiate({ ...result, tracks: undefined }, pc)
+          negotiated = true
           if (batch.some((t) => !this.subscriptions.has(trackKey(t)))) throw new Error('Incomplete subscription response')
           await this.waitConnected(pc)
           this.emitSnapshot()
@@ -431,10 +458,27 @@ export class CloudflareRoomService {
           // A publication can disappear between discovery and this request. The server
           // rejects it before touching SDP, so keep unrelated media and retry discovery.
           // Other failures may partially change SDP and require a fresh session.
-          if (!(error instanceof SignalingError && error.status === 403)) this.needsReset = true
+          if (!negotiated && !(error instanceof SignalingError && [403, 409, 429].includes(error.status))) this.needsReset = true
           throw error
         }
       })
+    }
+    for (const subscription of this.subscriptions.values()) {
+      const { source, mid } = subscription
+      const layer = this.videoLayer(source)
+      if (!source.simulcast || subscription.layer === layer) continue
+      try {
+        const result = await this.api<SfuResponse>('tracks/quality', { mid, sessionId: source.sessionId, trackName: source.trackName, preferredRid: layer })
+        await this.negotiate(result, this.pc!)
+        if (!result.tracks?.some((t) => t.mid === mid && !t.errorCode)) throw new Error('Incomplete quality response')
+        subscription.layer = layer
+        this.diagnostics.record('video.layer', undefined, layer)
+      } catch (error) {
+        // A quality preference is optional. Keep the current stream on rejected updates.
+        // A failed SDP exchange, however, cannot safely be reused.
+        if (this.pc?.signalingState !== 'stable') this.needsReset = true
+        throw error
+      }
     }
   }
 
@@ -511,6 +555,7 @@ export class CloudflareRoomService {
 
   private disposePeer(): void {
     const pc = this.pc
+    if (pc) this.diagnostics.record('peer.dispose')
     this.pc = null
     this.transportChannel?.close()
     this.transportChannel = null

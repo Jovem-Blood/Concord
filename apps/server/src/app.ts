@@ -219,7 +219,10 @@ export async function buildApp(
           p.roomCode === member.roomCode && p.sessionId === track.sessionId)
         const published = publisher && [...publisher.published.values()].find((t) => t.trackName === track.trackName)
         if (!published) fail(403, 'Track is not published in this room.')
-        return { location: 'remote', sessionId: track.sessionId, trackName: track.trackName, kind: published.kind }
+        const rid = track.preferredRid ?? 'f'
+        if (!['f', 'h', 'q'].includes(String(rid))) fail(400, 'Invalid video layer.')
+        return { location: 'remote', sessionId: track.sessionId, trackName: track.trackName, kind: published.kind,
+          ...(published.simulcast ? { simulcast: { preferredRid: String(rid), priorityOrdering: 'asciibetical' as const, ridNotAvailable: 'asciibetical' as const } } : {}) }
       })
     }
     const result = await sfu.request(session(member), 'tracks/new', {
@@ -231,10 +234,25 @@ export async function buildApp(
       const source = safeTracks.find((t) => t.trackName === track.trackName && (local || t.sessionId === track.sessionId))
       if (local && source?.kind && source.trackName) {
         const input = tracks.find((t) => t.trackName === source.trackName)!
-        member.published.set(track.mid, { mid: track.mid, trackName: source.trackName, kind: source.kind, source: input.source as MediaSource })
+        const section = (body.sessionDescription as { sdp: string }).sdp.split(/(?=^m=)/m)
+          .find((section) => section.split(/\r?\n/).includes(`a=mid:${input.mid}`)) ?? ''
+        const simulcast = source.kind === 'video' && ['f', 'h', 'q'].every((rid) => section.includes(`a=rid:${rid} send`)) && section.includes('a=simulcast:send')
+        member.published.set(track.mid, { mid: track.mid, trackName: source.trackName, kind: source.kind, source: input.source as MediaSource,
+          ...(simulcast ? { simulcast: true } : {}) })
       }
     }
     return result
+  }))
+  app.post('/v1/tracks/quality', authenticated, (request) => exclusive(request, async (member) => {
+    const body = request.body
+    if (!record(body) || !identifier(body.mid) || !member.mids.has(body.mid) || member.published.has(body.mid) ||
+      !identifier(body.sessionId) || !identifier(body.trackName) || !['f', 'h', 'q'].includes(String(body.preferredRid))) fail(400, 'Invalid video subscription.')
+    const publisher = [...members.values()].find((p) => active(p) && p !== member && p.roomCode === member.roomCode && p.sessionId === body.sessionId)
+    const publication = publisher && [...publisher.published.values()].find((t) => t.trackName === body.trackName && t.simulcast)
+    if (!publication) fail(403, 'Simulcast track is not published in this room.')
+    return sfu.request(session(member), 'tracks/update', { tracks: [{ location: 'remote', mid: body.mid,
+      sessionId: body.sessionId, trackName: body.trackName,
+      simulcast: { preferredRid: body.preferredRid, priorityOrdering: 'asciibetical', ridNotAvailable: 'asciibetical' } }] })
   }))
   app.post('/v1/renegotiate', authenticated, (request) => exclusive(request, async (member) => {
     if (!record(request.body) || !description(request.body.sessionDescription)) fail(400, 'Invalid SDP.')
@@ -252,7 +270,7 @@ export async function buildApp(
       ...(body.sessionDescription ? { sessionDescription: body.sessionDescription, force: false } : { force: true }),
     })
     for (const mid of body.mids) {
-      if (result.tracks?.some((t) => t.mid === mid && t.errorCode)) continue
+      if (result.tracks?.some((t) => t.mid === mid && t.errorCode && t.errorCode !== 'close_track_error')) continue
       member.published.delete(mid)
       member.mids.delete(mid)
     }

@@ -18,6 +18,10 @@ export class MicrophoneService {
   constructor(private readonly publisher: Publisher,
     private readonly changed: (state: VoiceState, track: MediaStreamTrack | null, busy: boolean) => void,
     private readonly error: (message: string) => void) {}
+  async prepare(): Promise<void> {
+    if (this.busy || this.track?.readyState === 'live') return
+    await this.start(true)
+  }
   async toggle(): Promise<void> {
     if (this.busy) return
     if (this.track?.readyState === 'live') {

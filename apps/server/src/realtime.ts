@@ -83,6 +83,11 @@ export function createRealtime(server: HttpServer, rooms: RoomAuthority, allowed
     socket.on('chat:send', (input, ack) => handle(ack, () => rooms.send(member, input), 'chat.receive', input?.traceparent))
     socket.on('chat:react', (input, ack) => handle(ack, () => rooms.react(member, input), 'chat.react'))
     socket.on('chat:typing', (input) => { if (rooms.owns(member, socket.id)) rooms.setTyping(member, input) })
+    socket.on('voice:state', (input) => {
+      if (!rooms.owns(member, socket.id) || !member.ready || typeof input?.muted !== 'boolean' || member.voiceMuted === input.muted) return
+      member.voiceMuted = input.muted
+      rooms.changed(member.roomCode)
+    })
     socket.on('disconnect', () => {
       clearTimeout(syncTimer)
       socket.conn.off('packetCreate', packetCreated); socket.conn.transport.off('drain', drained)

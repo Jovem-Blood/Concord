@@ -186,7 +186,7 @@ SemVer tags such as `v1.0.0` trigger `.github/workflows/release.yml`. The tag mu
 
 Electron runs with `nodeIntegration: false`, `contextIsolation: true`, sandboxing, and a restrictive Content Security Policy. Its preload exposes only capture operations and clipboard text writing. Capture selections are tied to the requesting window, expire after ten seconds, and are consumed once.
 
-The microphone is requested only after the user presses its control and never enables a camera. Chat history is kept only in API memory, limited to the latest 500 messages, and can be recovered when joining or reconnecting while the conversation remains active. It is deleted immediately when the last active connection drops or the API restarts; nothing is written to disk. If credentials expire without renewal or the recovery window ends, all active capture stops and joining again is required.
+The microphone is requested when joining a room and prepared while muted, so unmuting can reuse the existing audio publication. Denying permission does not prevent joining; the microphone control can retry later. No camera is enabled. Chat history is kept only in API memory, limited to the latest 500 messages, and can be recovered when joining or reconnecting while the conversation remains active. It is deleted immediately when the last active connection drops or the API restarts; nothing is written to disk. If credentials expire without renewal or the recovery window ends, all active capture stops and joining again is required.
 
 Please report vulnerabilities privately according to [SECURITY.md](SECURITY.md).
 

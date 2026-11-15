@@ -114,6 +114,63 @@ describe('Cloudflare WebRTC room lifecycle', () => {
   it('identifies signaling errors for classified diagnostics', () => {
     expect(new SignalingError(503)).toMatchObject({ name: 'SignalingError', status: 503 })
   })
+  it('applies a layer change requested during subscription without replacing its track', async () => {
+    const { connect, service, presence, fetcher, snapshots } = setup()
+    await connect()
+    const original = fetcher.getMockImplementation()!
+    const updates: unknown[] = []
+    fetcher.mockImplementation(async (url, options) => {
+      if (url.endsWith('/tracks/quality')) {
+        const body = JSON.parse(String(options.body)); updates.push(body)
+        return new Response(JSON.stringify({ tracks: [{ mid: body.mid }] }))
+      }
+      if (url.endsWith('/tracks')) service.setVideoLayer('remote:remote-session', 'q')
+      return original(url, options)
+    })
+    presence.tracks.push({ sessionId: 'remote-session', trackName: 'video', kind: 'video', source: 'screen-video', participantIdentity: 'remote', participantName: 'Remote', simulcast: true })
+    service.updatePresence(presence)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(updates).toEqual([expect.objectContaining({ preferredRid: 'q' })])
+    expect(snapshots[snapshots.length - 1]!.shares[0]!.videoTrack).toBeDefined()
+    expect(FakePeer.instances).toHaveLength(1)
+  })
+  it.each([409, 429])('retries pre-negotiation HTTP %s without rebuilding healthy media', async (status) => {
+    const { connect, service, presence, fetcher, snapshots } = setup()
+    await connect()
+    await service.publishMicrophone(new FakeTrack('audio', 'mic') as unknown as MediaStreamTrack)
+    fetcher.mockResolvedValueOnce(new Response('{}', { status }))
+    presence.tracks.push({ sessionId: 'remote-session', trackName: 'video', kind: 'video', source: 'screen-video', participantIdentity: 'remote', participantName: 'Remote' })
+    service.updatePresence(presence)
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(FakePeer.instances).toHaveLength(1)
+    expect(snapshots[snapshots.length - 1]!.shares[0]!.videoTrack).toBeDefined()
+  })
+  it('keeps successful subscriptions after a partial SFU response', async () => {
+    const { connect, service, presence, fetcher, snapshots } = setup()
+    await connect()
+    presence.tracks = ['first', 'second'].map(trackName => ({ sessionId: 'remote-session', trackName, kind: 'video', source: 'screen-video', participantIdentity: trackName, participantName: trackName }))
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ tracks: [
+      { sessionId: 'remote-session', trackName: 'first', mid: 'partial' },
+      { sessionId: 'remote-session', trackName: 'second', errorCode: 'track_not_found' },
+    ], sessionDescription: { type: 'offer', sdp: JSON.stringify([{ mid: 'partial', kind: 'video' }]) } })))
+    service.updatePresence(presence)
+    await vi.advanceTimersByTimeAsync(0)
+    const first = snapshots[snapshots.length - 1]!.shares.find(s => s.participantIdentity === 'first')!.videoTrack
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(FakePeer.instances).toHaveLength(1)
+    expect(snapshots[snapshots.length - 1]!.shares.find(s => s.participantIdentity === 'first')!.videoTrack).toBe(first)
+    expect(snapshots[snapshots.length - 1]!.shares.find(s => s.participantIdentity === 'second')!.videoTrack).toBeDefined()
+  })
+  it('accepts already-closed tracks without rebuilding the microphone connection', async () => {
+    const { connect, service, stream, fetcher } = setup()
+    await connect()
+    await service.publishMicrophone(new FakeTrack('audio', 'mic') as unknown as MediaStreamTrack)
+    await service.publishScreen(stream(false).media, '720p')
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ tracks: [{ mid: '1', errorCode: 'close_track_error' }], sessionDescription: { type: 'answer', sdp: 'closed' } })))
+    await service.unpublishScreen()
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(FakePeer.instances).toHaveLength(1)
+  })
 
   it('preserves per-track SFU errors before applying a rejected SDP and stops the microphone', async () => {
     const { connect, service, fetcher } = setup()
@@ -433,7 +490,7 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     await service.publishMicrophone(microphone as unknown as MediaStreamTrack)
     await service.publishScreen(stream(false).media, '720p')
     const setRemote = vi.spyOn(FakePeer.prototype, 'setRemoteDescription')
-    fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ tracks: [{ mid: '1', errorCode: 'close_track_error' }],
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ tracks: [{ mid: '1', errorCode: 'internal_error' }],
       sessionDescription: { type: 'answer', sdp: 'close-answer' } })))
     await service.unpublishScreen()
     expect(setRemote).toHaveBeenCalledWith({ type: 'answer', sdp: 'close-answer' })

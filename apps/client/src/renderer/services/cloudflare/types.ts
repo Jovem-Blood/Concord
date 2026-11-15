@@ -20,6 +20,7 @@ export type PublishedTrack = {
   trackName: string
   kind: 'audio' | 'video'
   source: MediaSource
+  simulcast?: boolean
 }
 export type RoomPresence = Presence
 export type SfuResponse = {

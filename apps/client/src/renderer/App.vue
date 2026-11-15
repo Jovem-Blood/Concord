@@ -205,6 +205,8 @@ async function joinRoom(roomCode: string): Promise<void> {
   presenceSounds.reset()
   try {
     await roomService.join(normalizedCode, name)
+    // Prepare a silent publication without delaying room entry or requiring permission to join.
+    void voiceControls.prepareMicrophone()
     localStorage.setItem('displayName', name)
     currentRoomCode.value = normalizedCode
     roomCodeInput.value = normalizedCode
@@ -230,8 +232,8 @@ async function leaveRoom(): Promise<void> {
   captureGeneration++
   soundPlayer.play('leave')
   presenceSounds.reset()
-  await Promise.all([roomService.disconnect(), stopSharing()])
   voiceControls.reset()
+  await Promise.all([roomService.disconnect(), stopSharing()])
   chatOpen.value = false
   chatDraft.value = ''
   currentRoomCode.value = ''
@@ -274,6 +276,26 @@ function connectionLabel(state: 'connected' | 'reconnecting' | 'disconnected'): 
 function focusShare(key: string): void {
   focusedShareKey.value = focusedShareKey.value === key ? '' : key
   wakeControls()
+}
+let diagnosticsPending = false
+function onDiagnosticsShortcut(event: KeyboardEvent): void {
+  if (!currentRoomCode.value || !event.ctrlKey || !event.shiftKey || event.altKey || event.metaKey || event.code !== 'KeyD') return
+  event.preventDefault()
+  if (!event.repeat) void downloadDiagnostics()
+}
+
+async function downloadDiagnostics(): Promise<void> {
+  if (diagnosticsPending) return
+  diagnosticsPending = true
+  try {
+    const first = await roomService.getDiagnostics()
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+    const second = await roomService.getDiagnostics()
+    const url = URL.createObjectURL(new Blob([JSON.stringify({ samples: [first, second] }, null, 2)], { type: 'application/json' }))
+    const link = document.createElement('a'); link.href = url; link.download = 'concord-media-diagnostics.json'; link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch { notify('Não foi possível coletar o diagnóstico de mídia.', 'error') }
+  finally { diagnosticsPending = false }
 }
 
 function freezeShare(shareKey: string, dataUrl: string): void {
@@ -426,6 +448,7 @@ function onPageHide(): void {
 onBeforeUnmount(() => {
   gridObserver?.disconnect()
   window.removeEventListener('pagehide', onPageHide)
+  window.removeEventListener('keydown', onDiagnosticsShortcut)
   if (controlsTimer) clearTimeout(controlsTimer)
   if (pingTimer) clearInterval(pingTimer)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
@@ -437,6 +460,7 @@ onBeforeUnmount(() => {
 
 onMounted(() => {
   window.addEventListener('pagehide', onPageHide)
+  window.addEventListener('keydown', onDiagnosticsShortcut)
   document.addEventListener('fullscreenchange', onFullscreenChange)
   wakeControls()
 })
@@ -501,6 +525,7 @@ onMounted(() => {
         <button v-if="invitedRoomCode" class="create-alternate" :disabled="!canSubmit" @click="createRoom">Prefiro criar uma nova sala</button>
 
         <div class="access-feedback">
+          <p class="status-note">Ao entrar, prepararemos seu microfone. Você começa silenciado e pode entrar mesmo sem permitir o acesso.</p>
           <p v-if="roomState === 'joining'" class="status-note" aria-live="polite">Conectando à sala…</p>
           <p v-if="errorMessage" class="error-banner" role="alert">{{ errorMessage }}</p>
         </div>
@@ -569,7 +594,7 @@ onMounted(() => {
             >
               <img class="participant-avatar" :src="avatarUrl(participant.name)" :alt="`Avatar de ${participant.name}`" />
               <strong>{{ participant.name }}{{ participant.isLocal ? ' · Você' : '' }}</strong>
-              <span class="participant-mic" :class="{ muted: participant.isLocal ? voiceControls.voice.value.muted : participant.voice.muted === true }" :data-tooltip="participant.isLocal ? (voiceControls.voice.value.muted ? 'Microfone silenciado' : 'Microfone ativo') : (participant.voice.muted === true ? 'Microfone silenciado' : 'Microfone ativo')" aria-hidden="true">
+              <span class="participant-mic" :class="{ muted: participant.isLocal ? voiceControls.voice.value.muted : (!participant.voice.available || participant.voice.muted === true) }" :data-tooltip="participant.isLocal ? (voiceControls.voice.value.muted ? 'Microfone silenciado' : 'Microfone ativo') : ((!participant.voice.available || participant.voice.muted === true) ? 'Microfone silenciado' : 'Microfone ativo')" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" /><path v-if="participant.isLocal ? voiceControls.voice.value.muted : participant.voice.muted" d="m3 3 18 18" /></svg>
               </span>
               <span v-if="!participant.isLocal" class="participant-connection" :class="participantConnection(participant)" :data-tooltip="`${connectionLabel(participantConnection(participant))}${pingMs === null ? '' : ` · Ping da sala: ${pingMs} ms`}`" :aria-label="`${connectionLabel(participantConnection(participant))}${pingMs === null ? '' : `, ping da sala ${pingMs} milissegundos`}`">
@@ -590,8 +615,10 @@ onMounted(() => {
               :level="shareLevels[share.key]"
               :output-device-id="voiceControls.outputDeviceId.value"
               :focused="focusedShareKey === share.key"
+              :hidden="Boolean(focusedShareKey && focusedShareKey !== share.key)"
               :placeholder="frozenFrames[share.key]"
               :class="{ hidden: focusedShareKey && focusedShareKey !== share.key }"
+              @quality="roomService.setVideoLayer(share.key, $event)"
               @focus="focusShare(share.key)"
               @frame="freezeShare(share.key, $event)"
               @audio-error="notify($event, 'error')"

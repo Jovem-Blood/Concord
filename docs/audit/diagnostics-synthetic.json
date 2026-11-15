@@ -1,0 +1,396 @@
+{
+  "samples": [
+    {
+      "capturedAt": 1794715995639,
+      "connection": "connected",
+      "signaling": "stable",
+      "transport": {
+        "currentRoundTripTime": 0.022,
+        "availableOutgoingBitrate": 5351805,
+        "bytesSent": 16173157,
+        "bytesReceived": 6200387
+      },
+      "tracks": [
+        {
+          "type": "inbound-rtp",
+          "kind": "video",
+          "mid": "3",
+          "bytesReceived": 6005739,
+          "packetsLost": 0,
+          "packetsReceived": 5770,
+          "jitter": 0.004,
+          "framesDecoded": 1387,
+          "framesDropped": 4,
+          "framesPerSecond": 20,
+          "frameWidth": 640,
+          "frameHeight": 360,
+          "freezeCount": 0,
+          "totalFreezesDuration": 0,
+          "totalDecodeTime": 1.692084
+        },
+        {
+          "type": "outbound-rtp",
+          "kind": "audio",
+          "mid": "1",
+          "bytesSent": 524547
+        },
+        {
+          "type": "outbound-rtp",
+          "kind": "video",
+          "mid": "2",
+          "rid": "h",
+          "bytesSent": 3329560,
+          "framesEncoded": 1104,
+          "framesPerSecond": 20,
+          "frameWidth": 640,
+          "frameHeight": 360,
+          "qualityLimitationReason": "none",
+          "totalEncodeTime": 4.571
+        },
+        {
+          "type": "outbound-rtp",
+          "kind": "video",
+          "mid": "2",
+          "rid": "f",
+          "bytesSent": 8519130,
+          "framesEncoded": 1228,
+          "framesPerSecond": 30,
+          "frameWidth": 1280,
+          "frameHeight": 720,
+          "qualityLimitationReason": "none",
+          "totalEncodeTime": 4.05
+        },
+        {
+          "type": "outbound-rtp",
+          "kind": "video",
+          "mid": "2",
+          "rid": "q",
+          "bytesSent": 925887,
+          "framesEncoded": 642,
+          "framesPerSecond": 10,
+          "frameWidth": 320,
+          "frameHeight": 180,
+          "qualityLimitationReason": "none",
+          "totalEncodeTime": 2.365
+        }
+      ],
+      "events": [
+        {
+          "at": 1794715921366,
+          "name": "queue.wait",
+          "durationMs": 1
+        },
+        {
+          "at": 1794715921453,
+          "name": "signal.ice-servers",
+          "durationMs": 86
+        },
+        {
+          "at": 1794715921889,
+          "name": "signal.session",
+          "durationMs": 523
+        },
+        {
+          "at": 1794715922316,
+          "name": "signal.media/prepare",
+          "durationMs": 426
+        },
+        {
+          "at": 1794715922742,
+          "name": "signal.renegotiate",
+          "durationMs": 281
+        },
+        {
+          "at": 1794715922804,
+          "name": "media.prepare",
+          "durationMs": 1437,
+          "outcome": "success"
+        },
+        {
+          "at": 1794715922804,
+          "name": "queue.wait",
+          "durationMs": 1365
+        },
+        {
+          "at": 1794715923047,
+          "name": "signal.tracks",
+          "durationMs": 241
+        },
+        {
+          "at": 1794715923048,
+          "name": "microphone.publish",
+          "durationMs": 244,
+          "outcome": "success"
+        },
+        {
+          "at": 1794715923048,
+          "name": "queue.wait",
+          "durationMs": 244
+        },
+        {
+          "at": 1794715923059,
+          "name": "queue.wait",
+          "durationMs": 0
+        },
+        {
+          "at": 1794715930631,
+          "name": "queue.wait",
+          "durationMs": 1
+        },
+        {
+          "at": 1794715931294,
+          "name": "queue.wait",
+          "durationMs": 1
+        },
+        {
+          "at": 1794715931582,
+          "name": "signal.tracks",
+          "durationMs": 279
+        },
+        {
+          "at": 1794715931583,
+          "name": "screen.publish",
+          "durationMs": 289,
+          "outcome": "success"
+        },
+        {
+          "at": 1794715931583,
+          "name": "queue.wait",
+          "durationMs": 2
+        },
+        {
+          "at": 1794715932466,
+          "name": "queue.wait",
+          "durationMs": 2
+        },
+        {
+          "at": 1794715932679,
+          "name": "signal.tracks",
+          "durationMs": 212
+        },
+        {
+          "at": 1794715932927,
+          "name": "signal.renegotiate",
+          "durationMs": 239
+        },
+        {
+          "at": 1794715932927,
+          "name": "media.subscribe",
+          "durationMs": 460,
+          "outcome": "success"
+        },
+        {
+          "at": 1794715933138,
+          "name": "signal.tracks/quality",
+          "durationMs": 211
+        },
+        {
+          "at": 1794715933138,
+          "name": "video.layer",
+          "outcome": "h"
+        },
+        {
+          "at": 1794715933138,
+          "name": "queue.wait",
+          "durationMs": 0
+        }
+      ]
+    },
+    {
+      "capturedAt": 1794715997656,
+      "connection": "connected",
+      "signaling": "stable",
+      "transport": {
+        "currentRoundTripTime": 0.017,
+        "availableOutgoingBitrate": 5351805,
+        "bytesSent": 17006467,
+        "bytesReceived": 6315184
+      },
+      "tracks": [
+        {
+          "type": "inbound-rtp",
+          "kind": "video",
+          "mid": "3",
+          "bytesReceived": 6115702,
+          "packetsLost": 0,
+          "packetsReceived": 5883,
+          "jitter": 0.003,
+          "framesDecoded": 1427,
+          "framesDropped": 4,
+          "framesPerSecond": 20,
+          "frameWidth": 640,
+          "frameHeight": 360,
+          "freezeCount": 0,
+          "totalFreezesDuration": 0,
+          "totalDecodeTime": 1.724454
+        },
+        {
+          "type": "outbound-rtp",
+          "kind": "audio",
+          "mid": "1",
+          "bytesSent": 540808
+        },
+        {
+          "type": "outbound-rtp",
+          "kind": "video",
+          "mid": "2",
+          "rid": "h",
+          "bytesSent": 3482388,
+          "framesEncoded": 1144,
+          "framesPerSecond": 20,
+          "frameWidth": 640,
+          "frameHeight": 360,
+          "qualityLimitationReason": "none",
+          "totalEncodeTime": 4.781
+        },
+        {
+          "type": "outbound-rtp",
+          "kind": "video",
+          "mid": "2",
+          "rid": "f",
+          "bytesSent": 9030357,
+          "framesEncoded": 1288,
+          "framesPerSecond": 30,
+          "frameWidth": 1280,
+          "frameHeight": 720,
+          "qualityLimitationReason": "none",
+          "totalEncodeTime": 4.264
+        },
+        {
+          "type": "outbound-rtp",
+          "kind": "video",
+          "mid": "2",
+          "rid": "q",
+          "bytesSent": 956899,
+          "framesEncoded": 662,
+          "framesPerSecond": 10,
+          "frameWidth": 320,
+          "frameHeight": 180,
+          "qualityLimitationReason": "none",
+          "totalEncodeTime": 2.458
+        }
+      ],
+      "events": [
+        {
+          "at": 1794715921366,
+          "name": "queue.wait",
+          "durationMs": 1
+        },
+        {
+          "at": 1794715921453,
+          "name": "signal.ice-servers",
+          "durationMs": 86
+        },
+        {
+          "at": 1794715921889,
+          "name": "signal.session",
+          "durationMs": 523
+        },
+        {
+          "at": 1794715922316,
+          "name": "signal.media/prepare",
+          "durationMs": 426
+        },
+        {
+          "at": 1794715922742,
+          "name": "signal.renegotiate",
+          "durationMs": 281
+        },
+        {
+          "at": 1794715922804,
+          "name": "media.prepare",
+          "durationMs": 1437,
+          "outcome": "success"
+        },
+        {
+          "at": 1794715922804,
+          "name": "queue.wait",
+          "durationMs": 1365
+        },
+        {
+          "at": 1794715923047,
+          "name": "signal.tracks",
+          "durationMs": 241
+        },
+        {
+          "at": 1794715923048,
+          "name": "microphone.publish",
+          "durationMs": 244,
+          "outcome": "success"
+        },
+        {
+          "at": 1794715923048,
+          "name": "queue.wait",
+          "durationMs": 244
+        },
+        {
+          "at": 1794715923059,
+          "name": "queue.wait",
+          "durationMs": 0
+        },
+        {
+          "at": 1794715930631,
+          "name": "queue.wait",
+          "durationMs": 1
+        },
+        {
+          "at": 1794715931294,
+          "name": "queue.wait",
+          "durationMs": 1
+        },
+        {
+          "at": 1794715931582,
+          "name": "signal.tracks",
+          "durationMs": 279
+        },
+        {
+          "at": 1794715931583,
+          "name": "screen.publish",
+          "durationMs": 289,
+          "outcome": "success"
+        },
+        {
+          "at": 1794715931583,
+          "name": "queue.wait",
+          "durationMs": 2
+        },
+        {
+          "at": 1794715932466,
+          "name": "queue.wait",
+          "durationMs": 2
+        },
+        {
+          "at": 1794715932679,
+          "name": "signal.tracks",
+          "durationMs": 212
+        },
+        {
+          "at": 1794715932927,
+          "name": "signal.renegotiate",
+          "durationMs": 239
+        },
+        {
+          "at": 1794715932927,
+          "name": "media.subscribe",
+          "durationMs": 460,
+          "outcome": "success"
+        },
+        {
+          "at": 1794715933138,
+          "name": "signal.tracks/quality",
+          "durationMs": 211
+        },
+        {
+          "at": 1794715933138,
+          "name": "video.layer",
+          "outcome": "h"
+        },
+        {
+          "at": 1794715933138,
+          "name": "queue.wait",
+          "durationMs": 0
+        }
+      ]
+    }
+  ]
+}

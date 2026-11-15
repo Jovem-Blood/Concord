@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR"><meta charset="utf-8"><title>Concord — auditoria de mídia</title>
+<style>body{background:#15191f;color:#eee;font:16px system-ui;padding:24px}button{padding:12px;margin:4px}video,canvas{width:320px}pre{white-space:pre-wrap}</style>
+<h1>Auditoria de mídia sintética</h1><p>Som e vídeo gerados; nenhum microfone ou tela pessoal é capturado. Apenas desenvolvimento.</p>
+<button id="join">Entrar e preparar áudio</button><button id="mute">Alternar microfone</button>
+<button id="share">Publicar tela sintética</button><button id="stop">Parar tela</button>
+<button id="stats">Medir mídia</button><button id="leave">Sair</button>
+<button id="low">Qualidade baixa</button><button id="high">Qualidade máxima</button><button id="outage">Suspender sinalização por 5s</button>
+<canvas width="1280" height="720"></canvas><div id="videos"></div><pre id="output">Pronto</pre>
+<script type="module">
+if (!import.meta.env.DEV) throw new Error('Development-only media audit')
+import { RoomSession } from './src/renderer/services/room-session.ts'
+import { CloudflareRoomService } from './src/renderer/services/cloudflare/room.ts'
+import { MicrophoneService } from './src/renderer/services/microphone.ts'
+const output = document.querySelector('#output')
+const events = []
+const record = (event, data = {}) => { events.push({time: Math.round(performance.now()), event, ...data}); output.textContent = JSON.stringify(events.slice(-30), null, 2) }
+const name = new URLSearchParams(location.search).get('name') || 'Audit A'
+const roomCode = new URLSearchParams(location.search).get('room') || 'AUDT2345'
+const media = new CloudflareRoomService()
+const room = new RoomSession(media)
+let ctx, oscillator, frame = 0, drawing, stream
+let latestShares = []
+const audioPlayers = new Map()
+const mic = new MicrophoneService(room, (state, track, busy) => record('microphone', { ...state, busy }), message => record('error', {message}))
+navigator.mediaDevices.getUserMedia = async () => {
+  ctx ||= new AudioContext(); await ctx.resume()
+  oscillator = ctx.createOscillator(); const gain = ctx.createGain(); gain.gain.value = 0.05
+  const destination = ctx.createMediaStreamDestination(); oscillator.connect(gain).connect(destination); oscillator.start()
+  return destination.stream
+}
+room.onConnection(state => record('room', {state}))
+room.onSnapshot(snapshot => {
+  latestShares = snapshot.shares
+  for (const voice of snapshot.remoteVoiceTracks) {
+    let audio = audioPlayers.get(voice.key)
+    if (!audio) { audio = new Audio(); audio.volume = 0; audio.srcObject = new MediaStream([voice.track]); audioPlayers.set(voice.key, audio); audio.play().catch(()=>{}) }
+  }
+  for (const [key, audio] of audioPlayers) if (!snapshot.remoteVoiceTracks.some(v => v.key === key)) { audio.srcObject = null; audioPlayers.delete(key) }
+  const container = document.querySelector('#videos')
+  for (const share of snapshot.shares) {
+    if (!share.videoTrack) continue
+    let video = [...container.children].find(v => v.dataset.key === share.key)
+    if (!video) { video = document.createElement('video'); video.dataset.key = share.key; video.autoplay = true; video.muted = true; video.playsInline = true; container.append(video) }
+    if (video.srcObject?.getVideoTracks()[0] !== share.videoTrack) video.srcObject = new MediaStream([share.videoTrack])
+  }
+  for (const video of [...container.children]) if (!snapshot.shares.some(s => s.key === video.dataset.key && s.videoTrack)) video.remove()
+})
+const action = (id, fn) => document.getElementById(id).onclick = async () => { const started = performance.now(); try { await fn(); record(id, {durationMs: Math.round(performance.now()-started)}) } catch(e) { record('error', {action:id, message:e.message}) } }
+action('join', async () => { await room.join(roomCode, name); await mic.prepare() })
+action('mute', () => mic.toggle())
+action('share', async () => {
+  const canvas = document.querySelector('canvas'); const painter = canvas.getContext('2d')
+  clearInterval(drawing); drawing = setInterval(() => { frame++; painter.fillStyle=`hsl(${frame%360} 70% 35%)`; painter.fillRect(0,0,1280,720); painter.fillStyle='white'; painter.font='60px sans-serif'; painter.fillText(`${name} — ${frame}`,60,180); painter.fillRect((frame*12)%1100,300,150,150) }, 33)
+  stream = canvas.captureStream(30); await room.publishScreen(stream, '720p')
+})
+action('stop', async () => { clearInterval(drawing); await room.unpublishScreen() })
+action('stats', async () => {
+  const data = await media.getDiagnostics()
+  record('stats', {...data, events:data.events.slice(-12)})
+})
+action('low', () => latestShares.forEach(s => media.setVideoLayer(s.key, 'q')))
+action('high', () => latestShares.forEach(s => media.setVideoLayer(s.key, 'f')))
+action('outage', async () => { media.setSignalingAvailable(false); await new Promise(r=>setTimeout(r,5000)); media.setSignalingAvailable(true) })
+action('leave', async () => { mic.reset(); clearInterval(drawing); oscillator?.stop(); await ctx?.close(); ctx=undefined; await room.disconnect() })
+window.addEventListener('pagehide', () => { mic.reset(); clearInterval(drawing) })
+</script></html>

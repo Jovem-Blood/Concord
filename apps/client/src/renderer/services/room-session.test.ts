@@ -76,6 +76,22 @@ function fixture() {
 }
 
 describe('RoomSession controller', () => {
+  it('synchronizes mute state on join, changes and reconnection without publishing media', async () => {
+    const { session, socket, join, media } = fixture()
+    const emit = vi.spyOn(socket, 'emit')
+    await join()
+    expect(emit).toHaveBeenCalledWith('voice:state', { muted: true })
+    session.setVoiceMuted(false)
+    expect(emit).toHaveBeenLastCalledWith('voice:state', { muted: false })
+    socket.drop()
+    emit.mockClear()
+    session.setVoiceMuted(true)
+    expect(emit).not.toHaveBeenCalledWith('voice:state', expect.anything())
+    socket.connect()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(emit).toHaveBeenCalledWith('voice:state', { muted: true })
+    expect(media.publishMicrophone).not.toHaveBeenCalled()
+  })
   it('waits for state synchronization before enabling send and never queues offline composition', async () => {
     const { session, socket, join, chat } = fixture()
     let complete!: (value: SyncState) => void

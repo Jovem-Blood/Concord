@@ -2,14 +2,21 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { RemoteShareView } from '../services/cloudflare/types'
 import { playbackLevel, type AudioLevel } from '../services/audio-level'
+import { layerForTile, type VideoLayer } from '../services/cloudflare/quality'
 
-const props = defineProps<{ share: RemoteShareView; focused: boolean; deafened: boolean; volume: number; outputDeviceId: string; level?: AudioLevel; placeholder?: string }>()
-const emit = defineEmits<{ focus: []; frame: [dataUrl: string]; audioError: [message: string] }>()
+const props = defineProps<{ share: RemoteShareView; focused: boolean; hidden?: boolean; deafened: boolean; volume: number; outputDeviceId: string; level?: AudioLevel; placeholder?: string }>()
+const emit = defineEmits<{ focus: []; frame: [dataUrl: string]; audioError: [message: string]; quality: [layer: VideoLayer] }>()
 
 const videoElement = ref<HTMLVideoElement | null>(null)
 const audioElement = ref<HTMLAudioElement | null>(null)
 const audioBlocked = ref(false)
 let frameCaptured = false
+let resizeObserver: ResizeObserver | undefined
+let qualityTimer: ReturnType<typeof setTimeout> | undefined
+function updateQuality(): void {
+  clearTimeout(qualityTimer)
+  qualityTimer = setTimeout(() => emit('quality', layerForTile(videoElement.value?.clientWidth ?? 0, Boolean(props.hidden))), 300)
+}
 
 function attach(): void {
   if (videoElement.value) videoElement.value.srcObject = props.share.videoTrack ? new MediaStream([props.share.videoTrack]) : null
@@ -62,12 +69,19 @@ async function playAudio(): Promise<void> {
   }
 }
 
-watch([() => props.share.videoTrack, () => props.share.audioTrack], () => {
-  detach()
+watch(() => props.share.videoTrack, () => {
   frameCaptured = Boolean(props.placeholder)
-  attach()
+  if (videoElement.value) videoElement.value.srcObject = props.share.videoTrack ? new MediaStream([props.share.videoTrack]) : null
   requestAnimationFrame(captureFrame)
 })
+watch(() => props.share.audioTrack, () => {
+  if (audioElement.value) audioElement.value.srcObject = props.share.audioTrack ? new MediaStream([props.share.audioTrack]) : null
+  audioBlocked.value = false
+  applyLevel()
+  void applyDevice()
+  if (props.share.audioTrack) void playAudio()
+})
+watch(() => props.hidden, updateQuality)
 watch(() => props.placeholder, (placeholder) => { frameCaptured = Boolean(placeholder) })
 watch(() => props.deafened, (deafened) => {
   applyLevel()
@@ -75,8 +89,13 @@ watch(() => props.deafened, (deafened) => {
 })
 watch([() => props.volume, () => props.level], applyLevel, { deep: true })
 watch(() => props.outputDeviceId, applyDevice)
-onMounted(() => { attach(); requestAnimationFrame(captureFrame) })
-onBeforeUnmount(detach)
+onMounted(() => {
+  attach(); requestAnimationFrame(captureFrame)
+  resizeObserver = new ResizeObserver(updateQuality)
+  if (videoElement.value) resizeObserver.observe(videoElement.value)
+  updateQuality()
+})
+onBeforeUnmount(() => { clearTimeout(qualityTimer); resizeObserver?.disconnect(); detach() })
 </script>
 
 <template>
