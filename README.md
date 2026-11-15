@@ -55,6 +55,10 @@ Download the latest desktop build from [GitHub Releases](https://github.com/Jove
 
 Windows artifacts are currently unsigned and may trigger a Microsoft SmartScreen warning. Portable ZIP builds do not self-update; installed NSIS and AppImage builds check GitHub Releases for updates.
 
+On desktop, the **Atualizações** panel shows the installed version, download progress, and errors with a retry action. Checks run at startup, every four hours, and through **Verificar atualizações**. Stable releases download automatically and install when Concord closes, or through **Reiniciar para atualizar**. Leave the room before using that button; downloading an update does not restart an ongoing call. On Linux, run the AppImage from a user-writable directory.
+
+Releases must include the generated update metadata (`latest.yml` on Windows and `latest-linux.yml` on Linux), installers, and generated blockmaps. The updater verifies the metadata's SHA-512; `SHA256SUMS.txt` is for manual verification. Older builds without an updater and portable ZIPs require an initial manual installation.
+
 ## How it works
 
 ```mermaid

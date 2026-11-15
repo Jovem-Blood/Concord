@@ -55,6 +55,10 @@ Baixe a versão desktop mais recente em [GitHub Releases](https://github.com/Jov
 
 Os artefatos do Windows ainda não são assinados e podem exibir um aviso do Microsoft SmartScreen. Os ZIPs portáteis não se atualizam sozinhos; instalações NSIS e AppImage verificam novas versões no GitHub Releases.
 
+No desktop, o painel **Atualizações** mostra a versão instalada, progresso do download e falhas com opção de tentar novamente. A verificação ocorre ao abrir o aplicativo, a cada quatro horas e pelo botão **Verificar atualizações**. Versões estáveis são baixadas automaticamente e instaladas ao fechar o Concord, ou pelo botão **Reiniciar para atualizar**. Saia da sala antes de usar esse botão; o download não reinicia o aplicativo durante uma chamada. No Linux, execute o AppImage em um diretório onde seu usuário tenha permissão de escrita.
+
+As releases precisam incluir os metadados gerados pelo empacotamento (`latest.yml` no Windows e `latest-linux.yml` no Linux), além dos instaladores e blockmaps gerados. O atualizador valida o SHA-512 dos metadados; `SHA256SUMS.txt` serve para conferência manual. Builds antigos sem atualizador e ZIPs precisam de instalação manual inicial.
+
 ## Como funciona
 
 ```mermaid

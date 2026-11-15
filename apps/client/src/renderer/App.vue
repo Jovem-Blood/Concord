@@ -8,6 +8,7 @@ import CallControls from './components/CallControls.vue'
 import AudioMenu from './components/AudioMenu.vue'
 import ChatPanel from './components/ChatPanel.vue'
 import DesktopDownloadNotice from './components/DesktopDownloadNotice.vue'
+import DesktopUpdates from './components/DesktopUpdates.vue'
 import MediaTile from './components/MediaTile.vue'
 import RemoteVoiceAudio from './components/RemoteVoiceAudio.vue'
 import SiteFooter from './components/SiteFooter.vue'
@@ -650,4 +651,5 @@ onMounted(() => {
   </div>
 
   <SourcePicker v-if="shareState === 'selecting'" :voice-active="voiceControls.voice.value.joined" @cancel="cancelPicker" @share="startSharing" />
+  <DesktopUpdates :in-room="Boolean(currentRoomCode) || roomState === 'joining'" :inert="shareState === 'selecting'" />
 </template>

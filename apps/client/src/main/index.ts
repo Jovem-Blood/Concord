@@ -4,7 +4,8 @@ import { pathToFileURL } from 'node:url'
 import { hasPendingCaptureSelection, registerCaptureHandlers } from './capture'
 import { registerClipboardHandlers } from './clipboard'
 import { audioOutputPermission, displayCapturePermission, microphonePermission, trustedRendererUrl } from './permissions'
-import { startAutoUpdates } from './updater'
+import { createAutoUpdates, type AutoUpdates } from './updater'
+import { registerUpdateHandlers } from './update-ipc'
 import { initializeDesktopTelemetry, reportDesktopError } from './telemetry'
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined
@@ -18,6 +19,8 @@ app.commandLine.appendSwitch('disable-features', [...new Set([...disabledFeature
 let mainWindow: BrowserWindow | null = null
 let disposeCaptureHandlers: (() => void) | null = null
 let disposeClipboardHandlers: (() => void) | null = null
+let updates: AutoUpdates
+let disposeUpdateHandlers: (() => void) | null = null
 
 function isTrustedRendererUrl(url: string): boolean {
   return trustedRendererUrl(url, rendererUrl())
@@ -53,6 +56,7 @@ function createMainWindow(): void {
   const appSession = mainWindow.webContents.session
   disposeCaptureHandlers = registerCaptureHandlers(mainWindow, appSession)
   disposeClipboardHandlers = registerClipboardHandlers(mainWindow)
+  disposeUpdateHandlers = registerUpdateHandlers(mainWindow, updates)
 
   appSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     const mediaTypes = 'mediaTypes' in details ? details.mediaTypes ?? [] : []
@@ -85,6 +89,8 @@ function createMainWindow(): void {
     disposeCaptureHandlers = null
     disposeClipboardHandlers?.()
     disposeClipboardHandlers = null
+    disposeUpdateHandlers?.()
+    disposeUpdateHandlers = null
     mainWindow = null
   })
 
@@ -116,8 +122,9 @@ void app.whenReady().then(() => {
     })
   })
 
+  updates = createAutoUpdates()
   createMainWindow()
-  startAutoUpdates()
+  updates.start()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
   })

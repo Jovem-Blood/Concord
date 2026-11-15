@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## 1.1.1
+
+### Changes
+
+- Add a desktop update panel with installed version, download progress, manual
+  checks, errors, and retry actions.
+- Check for stable releases at startup and every four hours, avoiding concurrent
+  downloads. Preserve automatic installation on exit.
+- Allow restarting to install a downloaded update after leaving the room.
+- Restrict update IPC to the main window's main frame and detect unsupported builds.
+
+### Validation and limitations
+
+- Client typecheck, lint, and 118 tests passed; Windows packaging and web build passed.
+- Electron UI tests exercised real local downloads, invalid checksum rejection,
+  retry, and the restart command. A simulated room verified the restart button guard.
+- The installer execution was intercepted in the UI test. Full NSIS replacement
+  and relaunch, and AppImage execution on Linux, remain unverified.
+- Room protocol remains 3. Windows artifacts are unsigned; portable ZIPs do not self-update.
+- See `docs/audit/updates-2026-11-15.md` for details.
+
 ## 1.1.0
 
 ### Breaking changes
