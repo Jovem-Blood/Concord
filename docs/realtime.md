@@ -1,4 +1,4 @@
-# Realtime room lifecycle (protocol v3)
+# Realtime room lifecycle (protocol v4)
 
 ## Ownership and transport
 
@@ -6,9 +6,9 @@
 - `apps/server/src/rooms.ts`: one in-memory `RoomAuthority` owns membership, credentials, conversation generations, ordering, message receipts, and typing.
 - `apps/server/src/realtime.ts`: Socket.IO gateway on `/v2/realtime/`, **WebSocket only**, with origin checks, authenticated events, bounded packets, and heartbeat detection.
 - `apps/client/src/renderer/services/room-session.ts`: the single client controller owns joins, readiness, recovery, credential rotation, the bounded outbox, typing, and departure.
-- The Cloudflare media service receives pushed presence and only performs HTTP SFU operations. It has event-driven reconciliation and failure recovery, not room polling.
+- The LiveKit media service receives Concord presence for UI identity, while the official SDK manages media signaling, subscriptions and recovery. See [LiveKit media](livekit.md).
 
-The server rejects old joins and retired room/chat APIs with HTTP 426 (`UPDATE_REQUIRED`). Socket handshakes must declare protocol 3. Credentials are sent in the Socket.IO auth payload, not URLs. There is no HTTP long-polling fallback and no Socket.IO packet-recovery store that could retain a deleted conversation.
+The server rejects old joins and retired room/chat APIs with HTTP 426 (`UPDATE_REQUIRED`). Socket handshakes must declare protocol 4. Credentials are sent in the Socket.IO auth payload, not URLs. There is no HTTP long-polling fallback and no Socket.IO packet-recovery store that could retain a deleted conversation.
 
 ## Lifecycle
 

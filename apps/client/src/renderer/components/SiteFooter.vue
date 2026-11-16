@@ -17,7 +17,7 @@
       <li>Vite</li>
       <li>Fastify</li>
       <li>WebRTC</li>
-      <li>Cloudflare Realtime</li>
+      <li>LiveKit</li>
     </ul>
   </footer>
 </template>

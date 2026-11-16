@@ -1,4 +1,4 @@
-export const PROTOCOL_VERSION: 3
+export const PROTOCOL_VERSION: 4
 export * from './telemetry.js'
 export const SOCKET_PATH: '/v2/realtime'
 export const RECOVERY_MS: number

@@ -4,8 +4,8 @@ set -eu
 usage() {
   cat <<'EOF'
 Usage: ./scripts/setup-self-host.sh [--force] [APP_HOST]
-Prepare the web client and signaling API for Cloudflare Realtime SFU.
-Then fill CLOUDFLARE_SFU_APP_ID and CLOUDFLARE_SFU_APP_SECRET in .env.
+Prepare the web client and signaling API for LiveKit.
+Then fill LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET in .env.
 Existing files are preserved unless --force is used.
 EOF
 }
@@ -58,9 +58,10 @@ client_tmp="$client_env.tmp.$$"
 cleanup() { rm -f "$server_tmp" "$client_tmp"; }
 trap cleanup EXIT HUP INT TERM
 cat >"$server_tmp" <<EOF
-# Fill with credentials from Cloudflare > Realtime > Serverless SFU. Keep private.
-CLOUDFLARE_SFU_APP_ID=
-CLOUDFLARE_SFU_APP_SECRET=
+# Fill with your LiveKit project credentials. Keep private.
+LIVEKIT_URL=
+LIVEKIT_API_KEY=
+LIVEKIT_API_SECRET=
 PORT=3001
 ALLOWED_ORIGINS=https://$api_host
 PUBLIC_APP_URL=https://$api_host

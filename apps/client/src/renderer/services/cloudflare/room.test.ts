@@ -4,6 +4,7 @@ import type { RoomPresence, RoomSnapshot } from './types'
 import { PresenceSoundNotifier } from '../sounds'
 
 class FakeTrack {
+  contentHint = ''
   readyState = 'live'
   enabled = true
   muted = false
@@ -119,13 +120,14 @@ function setup() {
 }
 
 describe('Cloudflare WebRTC room lifecycle', () => {
-  it('publishes two capped screen layers while preserving resolution and leaving audio unchanged', async () => {
+  it('publishes two capped screen layers with a motion policy and leaves audio unchanged', async () => {
     const { connect, service, stream } = setup()
     await connect()
     await service.publishScreen(stream().media, '720p')
     const senders = FakePeer.instances[0]!.transceivers.map(t => t.sender)
     const video = senders.find(s => s.track?.kind === 'video')!
-    expect(video.parameters.degradationPreference).toBe('maintain-resolution')
+    expect(video.track!.contentHint).toBe('motion')
+    expect(video.parameters.degradationPreference).toBe('maintain-framerate')
     expect(video.parameters.encodings).toEqual([
       expect.objectContaining({ rid: 'h', maxBitrate: 500_000, scaleResolutionDownBy: 2 }),
       expect.objectContaining({ rid: 'f', maxBitrate: 2_000_000, scaleResolutionDownBy: 1 }),

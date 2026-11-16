@@ -1,5 +1,27 @@
 # Screen-sharing quality reference and validation
 
+## Follow-up: reported frame-rate regression
+
+After deploying the initial change, the user reported reduced frame rate and
+continued low resolution. The initial `detail` / `maintain-resolution` policy
+favored presentation clarity, despite the application's moving-video use case.
+Moreover, the earlier canvas harness bypassed App.vue's `detail` assignment, so
+that live test did not exercise the exact production content hint.
+
+The follow-up moves the content hint into the shared publication service and
+uses `motion` / `maintain-framerate`. The same policy now applies to native,
+browser and synthetic publication paths. Bitrate ceilings and the two layers are
+unchanged. The 30 room/quality tests, client typecheck and lint passed. This is
+a correction of the configured FPS tradeoff, not a measured resolution of the
+reported regression; frame rate and automatic SFU layer recovery still need
+live verification. Preserving frame rate can still sacrifice resolution when
+resources are constrained.
+
+Reference: https://www.w3.org/TR/mst-content-hint/ explains why treating movies
+or games as text-oriented screen content can cause excessive frame dropping.
+
+The sections below record the original implementation and test results.
+
 ## Reference
 
 Use LiveKit's 30-fps screen-share presets and default half-resolution fallback as

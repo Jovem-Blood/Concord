@@ -367,7 +367,6 @@ async function startSharing(
     localStream.value = stream
     const videoTrack = stream.getVideoTracks()[0]
     if (!videoTrack) throw new Error('Missing video track')
-    videoTrack.contentHint = 'detail'
     videoTrack.onended = () => {
       logClient('warn', 'screen.capture.ended')
       void stopSharing()
@@ -619,7 +618,6 @@ onMounted(() => {
               :hidden="Boolean(focusedShareKey && focusedShareKey !== share.key)"
               :placeholder="frozenFrames[share.key]"
               :class="{ hidden: focusedShareKey && focusedShareKey !== share.key }"
-              @quality="roomService.setVideoLayer(share.key, $event)"
               @focus="focusShare(share.key)"
               @frame="freezeShare(share.key, $event)"
               @audio-error="notify($event, 'error')"

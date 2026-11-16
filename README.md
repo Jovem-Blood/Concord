@@ -18,7 +18,7 @@
 </p>
 
 > [!NOTE]
-> Concord is an early-stage project. Self-hosting requires your own Cloudflare Realtime Serverless SFU application.
+> Concord is an early-stage project. Media uses LiveKit Cloud or a reachable self-hosted LiveKit server.
 
 ## Why Concord?
 
@@ -26,7 +26,7 @@ Concord is designed for small groups that need a room quickly—not another acco
 
 - No accounts, camera, recording, permanent message history, attachments, or direct messages.
 - Web and desktop clients share the same Vue renderer and can join the same room.
-- Media travels through Cloudflare Realtime. Chat, presence, and typing use a dedicated Socket.IO WebSocket connection to the Concord API.
+- Media travels through LiveKit. Chat, presence, and typing use a dedicated Socket.IO WebSocket connection to the Concord API.
 - The desktop app is available for Windows and Linux, with a self-hostable web client.
 
 ## Features
@@ -65,19 +65,19 @@ Releases must include the generated update metadata (`latest.yml` on Windows and
 flowchart LR
   Client[Web or desktop client]
   API[Concord token and presence API]
-  SFU[Cloudflare Realtime SFU]
+  SFU[LiveKit SFU]
 
   Client <-->|WebSocket presence, chat, typing, and renewal| API
   Client -->|HTTP join and media signaling| API
-  API -->|session and track orchestration| SFU
+  API -->|room-scoped tokens and departure cleanup| SFU
   Client <-->|screen and voice| SFU
 ```
 
-Cloudflare provides media sessions and tracks—not Concord rooms. One server `RoomAuthority` owns membership, credentials, and conversation generations. One client `RoomSession` coordinates a WebSocket-only Socket.IO connection and a separate WebRTC media service. Presence, messages, and typing are pushed immediately; room polling and the old DataChannel chat transport have been retired. HTTP remains responsible for joining, media signaling, and best-effort unload delivery.
+The server `RoomAuthority` owns membership, credentials and chat. `RoomSession` coordinates Socket.IO and the official LiveKit client SDK. The SDK owns media signaling, reconnection, adaptive subscriptions and Dynacast. Screen tracks use LiveKit's 720p/30 or 1080p/30 presets; moving video prioritizes frame rate. Video elements attach through the SDK so it can adapt to their size and visibility. No custom layer-selection loop is used. HTTP provides joining, room-scoped media tokens and best-effort departure delivery.
 
 Participant credentials rotate automatically before their two-hour expiry. Unexpected connection loss reserves the participant's identity and room slot for 30 seconds after detection (heartbeats take approximately 15 seconds to detect a silent failure). Working media continues during recovery, then stops if recovery expires. Refresh/Leave requires an explicit rejoin. A disconnected last participant does **not** preserve history during the recovery window: their next connection starts a new conversation. Run a single API instance; an API restart clears rooms and requires rejoining.
 
-See [Realtime lifecycle and deployment](docs/realtime.md) for protocol, retry, Cloudflare Tunnel, and rollout details. Protocol v3 requires updating the server and all clients together.
+See [LiveKit integration](docs/livekit.md) and [Realtime lifecycle](docs/realtime.md). Protocol v4 requires updating the API, web and desktop clients together. Cloudflare Tunnel can still expose the Concord HTTP/WebSocket server; media connects directly to LiveKit Cloud without home port forwarding.
 
 ## Quick start
 
@@ -85,16 +85,17 @@ See [Realtime lifecycle and deployment](docs/realtime.md) for protocol, retry, C
 
 - Node.js `22.12+` for development; Node.js 24 LTS is recommended and required by the release workflow.
 - pnpm `10.15.0`.
-- A Cloudflare Realtime Serverless SFU application.
+- A LiveKit Cloud project or reachable self-hosted LiveKit server.
 - Windows 11 x64 for native Windows capture testing, or a current browser with `getDisplayMedia` and HTTPS outside localhost.
 
 ### 1. Configure the environment
 
-Copy `.env.example` to `.env` without replacing an existing local file. Create an SFU application in **Cloudflare → Realtime → Serverless SFU**, then set:
+Copy `.env.example` to `.env` without replacing an existing local file. Set your LiveKit project credentials:
 
 ```dotenv
-CLOUDFLARE_SFU_APP_ID=your_app_id
-CLOUDFLARE_SFU_APP_SECRET=your_app_secret
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=your_api_key
+LIVEKIT_API_SECRET=your_api_secret
 ```
 
 Never place secrets in a `VITE_` variable; those values are embedded into client builds.
@@ -121,7 +122,7 @@ An invite such as `http://localhost:5173/ABCD2345` prepares the client to join t
 docker compose up --build
 ```
 
-Open `http://localhost:4173`. The single Compose file loads the root `.env` automatically and binds both services to loopback. There is no local SFU emulator: development media still uses Cloudflare. Unit tests use an SFU mock and need no credentials.
+Open `http://localhost:4173`. Compose loads the root `.env` and binds both services to loopback. Development media uses the configured LiveKit project. Unit tests use mocks and need no credentials.
 
 ### Production through a tunnel
 
@@ -140,8 +141,9 @@ Run exactly one `server` instance: room presence, tokens, and publications are k
 
 | Variable | Purpose |
 |---|---|
-| `CLOUDFLARE_SFU_APP_ID` | Required server-side SFU application ID |
-| `CLOUDFLARE_SFU_APP_SECRET` | Required server-side SFU application secret |
+| `LIVEKIT_URL` | LiveKit WebSocket URL (`wss://...`) |
+| `LIVEKIT_API_KEY` | Server-side LiveKit API key |
+| `LIVEKIT_API_SECRET` | Server-side LiveKit API secret |
 | `ALLOWED_ORIGINS` | Comma-separated web origins accepted by the API |
 | `PORT` | API port; defaults to `3001` |
 | `PUBLIC_APP_URL` | Public web URL used by Docker Compose |
@@ -155,7 +157,7 @@ OpenTelemetry export is optional and supports OTLP HTTP/protobuf, HTTP/JSON and 
 
 Server logs are structured JSON. The client reports errors, warnings, connection loss and recovery to `/v1/client-events`; a bounded in-memory queue retries reports after connectivity returns. Reports contain an ephemeral client ID, platform, event, severity and limited error classification. They do not include room codes, names, tokens, SDP or chat content. Events queued when the app closes are lost.
 
-Concord uses Cloudflare STUN by default. To support networks that require a TURN relay, set both `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_API_TOKEN` on the server; the API generates temporary ICE credentials for clients. Without this configuration, relay-dependent networks are unsupported. Web capture audio availability depends on the browser, operating system, and selected source; video continues with a warning when audio is unavailable.
+LiveKit provides ICE/TURN configuration to its SDK. Cloudflare TURN credentials are not used by the LiveKit client. Web capture audio availability depends on the browser, operating system and selected source; video continues with a warning when audio is unavailable.
 
 ## Development
 
@@ -182,7 +184,7 @@ CI runs type checks, tests, lint, web/server builds, and Docker builds on pushes
 to `main` and pull requests. Deployment to the self-hosted machine is manual.
 The download reflects the latest tagged release; `main` may include newer work.
 
-Desktop, web, and API must use room protocol 3, which adds replies and authenticated message reactions. Older clients receive an update-required response from the API. See [release notes](CHANGELOG.md) for changes and known limitations.
+Desktop, web and API must use room protocol 4 for LiveKit media. Older clients receive an update-required response. See [release notes](CHANGELOG.md).
 
 SemVer tags such as `v1.0.0` trigger `.github/workflows/release.yml`. The tag must match `apps/client/package.json` and point to a commit contained in `main`. The workflow verifies the project, builds Windows and Linux artifacts, generates SHA-256 checksums, and publishes a GitHub Release.
 

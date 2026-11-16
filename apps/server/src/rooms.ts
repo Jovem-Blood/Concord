@@ -8,6 +8,7 @@ export type Participant = {
   credentials: Credentials; pendingCredentials?: Credentials; tokens: Set<string>
   socketId?: string; joined: boolean; recoveryUntil: number; ready: boolean
   voiceMuted?: boolean
+  livekitIssued?: boolean
   sessionId?: string; transportChannelId?: number; published: Map<string, Publication>; mids: Set<string>; busy: boolean
   chatSentAt: number[]; typingAt: number; typingUntil: number
   sequenceConversation: string; highWater: number

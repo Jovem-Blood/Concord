@@ -18,7 +18,7 @@
 </p>
 
 > [!NOTE]
-> O Concord está em fase inicial. A hospedagem própria exige um aplicativo Cloudflare Realtime Serverless SFU.
+> O Concord está em fase inicial. A mídia usa LiveKit Cloud ou um servidor LiveKit próprio acessível aos clientes.
 
 ## Por que Concord?
 
@@ -26,7 +26,7 @@ O Concord foi feito para pequenos grupos que precisam de uma sala rapidamente �
 
 - Sem contas, câmera, gravação, histórico permanente de mensagens, anexos ou mensagens diretas.
 - Clientes web e desktop usam o mesmo renderer Vue e entram na mesma sala.
-- A mídia passa pela Cloudflare Realtime. Chat, presença e digitação usam uma conexão Socket.IO dedicada, somente por WebSocket, com a API do Concord.
+- A mídia passa pelo LiveKit. Chat, presença e digitação usam uma conexão Socket.IO dedicada, somente por WebSocket, com a API do Concord.
 - O aplicativo desktop está disponível para Windows e Linux, com cliente web auto-hospedável.
 
 ## Recursos
@@ -65,19 +65,19 @@ As releases precisam incluir os metadados gerados pelo empacotamento (`latest.ym
 flowchart LR
   Client[Cliente web ou desktop]
   API[API de tokens e presença do Concord]
-  SFU[Cloudflare Realtime SFU]
+  SFU[LiveKit SFU]
 
   Client <-->|WebSocket de presença, chat, digitação e renovação| API
   Client -->|entrada e sinalização de mídia por HTTP| API
-  API -->|orquestração de sessões e faixas| SFU
+  API -->|tokens por sala e limpeza na saída| SFU
   Client <-->|tela e voz| SFU
 ```
 
-A Cloudflare fornece sessões de mídia e faixas — não as salas do Concord. Uma `RoomAuthority` no servidor controla participantes, credenciais e gerações da conversa. Uma `RoomSession` no cliente coordena a conexão Socket.IO por WebSocket e um serviço separado de mídia WebRTC. Presença, mensagens e digitação são entregues imediatamente; o polling da sala e o chat antigo por DataChannel foram desativados. HTTP continua responsável pela entrada, sinalização da mídia e aviso de saída ao fechar a página.
+A `RoomAuthority` controla participantes, credenciais e chat. A `RoomSession` coordena Socket.IO e o SDK oficial do LiveKit, responsável por sinalização da mídia, reconexão, assinaturas adaptativas e Dynacast. As telas usam os presets 720p/30 ou 1080p/30 do SDK e priorizam fluidez para vídeo em movimento. Os elementos de vídeo usam `track.attach()` para adaptação por tamanho e visibilidade, sem nosso seletor manual de camadas. HTTP fornece entrada, tokens de mídia por sala e aviso de saída.
 
 As credenciais são renovadas automaticamente antes de expirar em duas horas. Uma queda inesperada reserva a identidade e a vaga por 30 segundos após a detecção (até aproximadamente 15 segundos de heartbeat para detectar uma falha silenciosa). A mídia continua durante a recuperação e para se o prazo expirar. Recarregar/sair exige entrar novamente. A última conexão cair apaga o histórico imediatamente, mesmo durante a reserva de reconexão. Execute uma única instância da API; reiniciá-la apaga as salas e exige entrar novamente.
 
-Consulte [Ciclo de vida e implantação em tempo real](docs/realtime.md) para detalhes do protocolo, reenvio e Cloudflare Tunnel. O protocolo v3 exige atualizar servidor e clientes juntos.
+Consulte [Integração LiveKit](docs/livekit.md) e [Ciclo de vida em tempo real](docs/realtime.md). O protocolo v4 exige atualizar API, web e desktop juntos. O Cloudflare Tunnel continua servindo a API; a mídia se conecta diretamente ao LiveKit Cloud, sem abrir portas na rede doméstica.
 
 ## Início rápido
 
@@ -85,16 +85,17 @@ Consulte [Ciclo de vida e implantação em tempo real](docs/realtime.md) para de
 
 - Node.js `22.12+` para desenvolvimento; Node.js 24 LTS é recomendado e usado no workflow de release.
 - pnpm `10.15.0`.
-- Um aplicativo Cloudflare Realtime Serverless SFU.
+- Um projeto LiveKit Cloud ou servidor LiveKit próprio acessível.
 - Windows 11 x64 para testes de captura nativa no Windows, ou navegador atual com `getDisplayMedia` e HTTPS fora de localhost.
 
 ### 1. Configure o ambiente
 
-Copie `.env.example` para `.env` sem substituir um arquivo local existente. Crie um aplicativo em **Cloudflare → Realtime → Serverless SFU** e defina:
+Copie `.env.example` para `.env` sem substituir um arquivo local existente e configure o projeto LiveKit:
 
 ```dotenv
-CLOUDFLARE_SFU_APP_ID=seu_app_id
-CLOUDFLARE_SFU_APP_SECRET=seu_app_secret
+LIVEKIT_URL=wss://seu-projeto.livekit.cloud
+LIVEKIT_API_KEY=sua_api_key
+LIVEKIT_API_SECRET=seu_api_secret
 ```
 
 Nunca coloque segredos em variáveis `VITE_`; esses valores são incorporados aos builds do cliente.
@@ -121,7 +122,7 @@ Um convite como `http://localhost:5173/ABCD2345` prepara o cliente para entrar n
 docker compose up --build
 ```
 
-Abra `http://localhost:4173`. O único arquivo Compose carrega o `.env` da raiz automaticamente e prende os dois serviços ao loopback. Não há emulador SFU local: a mídia de desenvolvimento também usa a Cloudflare. Os testes unitários usam um SFU simulado e não precisam de credenciais.
+Abra `http://localhost:4173`. O Compose carrega o `.env` da raiz e prende os serviços ao loopback. A mídia de desenvolvimento usa o projeto LiveKit configurado. Os testes unitários usam mocks e não precisam de credenciais.
 
 ### Produção por túnel
 
@@ -140,8 +141,9 @@ Execute exatamente uma instância de `server`: presença, tokens e publicações
 
 | Variável | Uso |
 |---|---|
-| `CLOUDFLARE_SFU_APP_ID` | Identificador obrigatório do aplicativo SFU no servidor |
-| `CLOUDFLARE_SFU_APP_SECRET` | Segredo obrigatório do aplicativo SFU no servidor |
+| `LIVEKIT_URL` | URL WebSocket do LiveKit (`wss://...`) |
+| `LIVEKIT_API_KEY` | Chave de API LiveKit no servidor |
+| `LIVEKIT_API_SECRET` | Segredo de API LiveKit no servidor |
 | `ALLOWED_ORIGINS` | Origens web aceitas pela API, separadas por vírgula |
 | `PORT` | Porta da API; padrão `3001` |
 | `PUBLIC_APP_URL` | URL pública do web usada pelo Docker Compose |
@@ -155,7 +157,7 @@ A exportação OpenTelemetry é opcional e aceita destinos OTLP por HTTP/protobu
 
 Os logs do servidor são JSON estruturado. O cliente envia erros, avisos, perda de conexão e recuperação para `/v1/client-events`; uma fila limitada em memória tenta reenviar quando a conexão volta. Os relatos contêm ID temporário do cliente, plataforma, evento, nível e classificação limitada do erro. Não incluem código da sala, nome, token, SDP ou conteúdo do chat. Eventos pendentes se perdem ao fechar o aplicativo.
 
-O Concord usa STUN da Cloudflare por padrão. Para atender redes que exigem relay TURN, configure `CLOUDFLARE_TURN_KEY_ID` e `CLOUDFLARE_TURN_API_TOKEN` juntos no servidor; a API gera credenciais ICE temporárias para os clientes. Sem essa configuração, redes que dependem de relay não são suportadas. A disponibilidade de áudio na captura web depende do navegador, sistema operacional e fonte escolhida; quando o áudio não está disponível, o vídeo continua com um aviso.
+O LiveKit fornece a configuração ICE/TURN ao SDK. O cliente LiveKit não usa as credenciais TURN da Cloudflare. O áudio da captura web depende do navegador, sistema operacional e fonte escolhida; quando indisponível, o vídeo continua com um aviso.
 
 ## Desenvolvimento
 

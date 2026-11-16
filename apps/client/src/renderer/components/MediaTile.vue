@@ -2,23 +2,26 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { RemoteShareView } from '../services/cloudflare/types'
 import { playbackLevel, type AudioLevel } from '../services/audio-level'
-import { layerForTile, type VideoLayer } from '../services/cloudflare/quality'
 
 const props = defineProps<{ share: RemoteShareView; focused: boolean; hidden?: boolean; deafened: boolean; volume: number; outputDeviceId: string; level?: AudioLevel; placeholder?: string }>()
-const emit = defineEmits<{ focus: []; frame: [dataUrl: string]; audioError: [message: string]; quality: [layer: VideoLayer] }>()
+const emit = defineEmits<{ focus: []; frame: [dataUrl: string]; audioError: [message: string] }>()
 
 const videoElement = ref<HTMLVideoElement | null>(null)
 const audioElement = ref<HTMLAudioElement | null>(null)
 const audioBlocked = ref(false)
 let frameCaptured = false
-let qualityTimer: ReturnType<typeof setTimeout> | undefined
-function updateQuality(): void {
-  clearTimeout(qualityTimer)
-  qualityTimer = setTimeout(() => emit('quality', layerForTile(Boolean(props.hidden))), 300)
+let attachedVideo: RemoteShareView['livekitVideo']
+function attachVideo(): void {
+  const element = videoElement.value
+  if (!element) return
+  attachedVideo?.detach(element)
+  attachedVideo = props.share.livekitVideo
+  if (attachedVideo) attachedVideo.attach(element)
+  else element.srcObject = props.share.videoTrack ? new MediaStream([props.share.videoTrack]) : null
 }
 
 function attach(): void {
-  if (videoElement.value) videoElement.value.srcObject = props.share.videoTrack ? new MediaStream([props.share.videoTrack]) : null
+  attachVideo()
   if (audioElement.value) {
     audioElement.value.srcObject = props.share.audioTrack ? new MediaStream([props.share.audioTrack]) : null
     applyLevel()
@@ -54,6 +57,8 @@ function captureFrame(): void {
 }
 
 function detach(): void {
+  if (videoElement.value) attachedVideo?.detach(videoElement.value)
+  attachedVideo = undefined
   if (videoElement.value) videoElement.value.srcObject = null
   if (audioElement.value) audioElement.value.srcObject = null
   audioBlocked.value = false
@@ -68,9 +73,9 @@ async function playAudio(): Promise<void> {
   }
 }
 
-watch(() => props.share.videoTrack, () => {
+watch([() => props.share.videoTrack, () => props.share.livekitVideo], () => {
   frameCaptured = Boolean(props.placeholder)
-  if (videoElement.value) videoElement.value.srcObject = props.share.videoTrack ? new MediaStream([props.share.videoTrack]) : null
+  attachVideo()
   requestAnimationFrame(captureFrame)
 })
 watch(() => props.share.audioTrack, () => {
@@ -80,7 +85,6 @@ watch(() => props.share.audioTrack, () => {
   void applyDevice()
   if (props.share.audioTrack) void playAudio()
 })
-watch(() => props.hidden, updateQuality)
 watch(() => props.placeholder, (placeholder) => { frameCaptured = Boolean(placeholder) })
 watch(() => props.deafened, (deafened) => {
   applyLevel()
@@ -90,9 +94,8 @@ watch([() => props.volume, () => props.level], applyLevel, { deep: true })
 watch(() => props.outputDeviceId, applyDevice)
 onMounted(() => {
   attach(); requestAnimationFrame(captureFrame)
-  updateQuality()
 })
-onBeforeUnmount(() => { clearTimeout(qualityTimer); detach() })
+onBeforeUnmount(detach)
 </script>
 
 <template>

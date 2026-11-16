@@ -2,13 +2,24 @@
 
 ## Unreleased
 
+- Replace the application's Cloudflare media transport with the official LiveKit
+  SDK: room-scoped server tokens, screen/audio publication, adaptive subscriptions,
+  Dynacast and SDK reconnection. Keep Concord room admission, chat and capture UI.
+- Require LiveKit configuration for deployment and protocol 4 for clients. Preserve
+  the selected 720p/1080p capture ceiling and prepare muted microphone on entry.
+
+### Previous Cloudflare implementation (retained for historical tests)
+
 - Prefer the selected capture quality for visible streams instead of downgrading
   based on tile width. Hidden streams still request the lowest layer, and SFU
   bandwidth fallback and the selected resolution cap remain enabled.
 - Base screen sharing on LiveKit's 30-fps presets: 720p at 2 Mbps or 1080p at
   5 Mbps, plus one half-resolution fallback at a quarter of the primary bitrate.
-  Prefer preserving resolution over frame rate under encoder pressure. Accept
+  Prefer preserving frame rate for moving video under encoder pressure. Accept
   both the new two-layer and existing three-layer publications on the API.
+- Apply the motion hint in the publication service so real capture and synthetic
+  tests use the same policy. This corrects the presentation-oriented policy added
+  in the initial preset change; automatic SFU quality recovery remains unresolved.
 
 ## 1.1.1
 

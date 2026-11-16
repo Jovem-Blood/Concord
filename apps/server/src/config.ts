@@ -1,7 +1,8 @@
 export type ServerConfig = {
   host: string
   port: number
-  cloudflareSfu: { appId: string; appSecret: string }
+  cloudflareSfu?: { appId: string; appSecret: string }
+  livekit?: { url: string; apiKey: string; apiSecret: string }
   cloudflareTurn?: { keyId: string; apiToken: string }
   allowedOrigins: string[]
 }
@@ -9,7 +10,13 @@ export type ServerConfig = {
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): ServerConfig {
   const appId = environment.CLOUDFLARE_SFU_APP_ID?.trim()
   const appSecret = environment.CLOUDFLARE_SFU_APP_SECRET?.trim()
-  if (!appId || !appSecret) {
+  const url = environment.LIVEKIT_URL?.trim()
+  const apiKey = environment.LIVEKIT_API_KEY?.trim()
+  const apiSecret = environment.LIVEKIT_API_SECRET?.trim()
+  const useLiveKit = Boolean(url || apiKey || apiSecret)
+  if (useLiveKit && (!url || !apiKey || !apiSecret)) throw new Error('LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET are required together')
+  if (url && !['wss:', 'ws:'].includes(new URL(url).protocol)) throw new Error('LIVEKIT_URL must use ws:// or wss://')
+  if (!useLiveKit && (!appId || !appSecret)) {
     throw new Error('CLOUDFLARE_SFU_APP_ID and CLOUDFLARE_SFU_APP_SECRET are required')
   }
   const turnKeyId = environment.CLOUDFLARE_TURN_KEY_ID?.trim()
@@ -21,7 +28,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): Server
   return {
     host: environment.HOST ?? '0.0.0.0',
     port: Number.parseInt(environment.PORT ?? '3001', 10),
-    cloudflareSfu: { appId, appSecret },
+    ...(appId && appSecret ? { cloudflareSfu: { appId, appSecret } } : {}),
+    ...(url && apiKey && apiSecret ? { livekit: { url, apiKey, apiSecret } } : {}),
     ...(turnKeyId && turnApiToken ? { cloudflareTurn: { keyId: turnKeyId, apiToken: turnApiToken } } : {}),
     allowedOrigins: (environment.ALLOWED_ORIGINS ?? '')
       .split(',')

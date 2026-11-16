@@ -7,6 +7,7 @@ import type { Span } from '@opentelemetry/api'
 import type { Telemetry } from './telemetry.js'
 import { RoomAuthority, type Participant } from './rooms.js'
 import { createRealtime } from './realtime.js'
+import { createLiveKit } from './livekit.js'
 import type { ServerConfig } from './config.js'
 import { parseJoinInput } from './validation.js'
 import { validMediaSource, type MediaSource } from './media.js'
@@ -31,8 +32,11 @@ export async function buildApp(
   config: ServerConfig,
   sfuClient?: SfuClient,
   telemetry?: Telemetry,
+  livekitClient?: ReturnType<typeof createLiveKit>,
 ) {
-  const sfu = sfuClient ?? createSfuClient(config.cloudflareSfu, fetch, telemetry)
+  const livekit = livekitClient ?? (config.livekit ? createLiveKit(config.livekit) : undefined)
+  const unavailable = async (): Promise<never> => fail(426, 'Use the LiveKit media client.')
+  const sfu = sfuClient ?? (config.cloudflareSfu && !livekit ? createSfuClient(config.cloudflareSfu, fetch, telemetry) : { createSession: unavailable, request: unavailable })
   const app = Fastify({
     logger: { level: process.env.LOG_LEVEL ?? 'info', redact: ['req.headers.authorization', 'req.body'] },
     bodyLimit: 256 * 1024,
@@ -99,6 +103,12 @@ export async function buildApp(
     return rooms.authenticate(token, true)
   }
   async function closeSession(member: Participant): Promise<void> {
+    if (livekit && member.livekitIssued) {
+      member.livekitIssued = false
+      await livekit.remove(member.roomCode, member.identity).catch(() => {
+        app.log.warn({ event: 'livekit.cleanup.failed' })
+      })
+    }
     const sessionId = member.sessionId
     const channelId = member.transportChannelId
     const tracks = [...member.mids].map((mid) => ({ mid }))
@@ -139,7 +149,16 @@ export async function buildApp(
     return member.sessionId ?? fail(409, 'Create a media session first.')
   }
 
-  app.get('/health', async () => ({ status: 'ok', mediaProvider: 'cloudflare-sfu' }))
+  app.get('/health', async () => ({ status: 'ok', mediaProvider: livekit ? 'livekit' : 'cloudflare-sfu' }))
+  app.post('/v1/livekit/token', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
+    const bearer = request.headers.authorization?.match(/^Bearer (\S+)$/)?.[1]
+    const member = rooms.authenticate(bearer)
+    if (!livekit) fail(503, 'LiveKit is not configured on this server.')
+    member.livekitIssued = true
+    const result = await livekit.token(member.roomCode, member.identity, member.name)
+    if (!active(member)) { await closeSession(member); fail(401, 'Session ended.') }
+    return reply.header('cache-control', 'no-store').send(result)
+  })
   app.get('/v1/telemetry', async (_request, reply) => reply.header('cache-control', 'no-store').send({
     ...(telemetry?.clientConfig ?? { enabled: false, traces: false, sampleRatio: 0 }), serverTime: Date.now(),
   }))

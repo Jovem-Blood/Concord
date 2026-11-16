@@ -5,22 +5,21 @@
 <button id="join">Entrar e preparar áudio</button><button id="mute">Alternar microfone</button>
 <button id="share">Publicar tela sintética</button><button id="stop">Parar tela</button>
 <button id="stats">Medir mídia</button><button id="leave">Sair</button>
-<button id="low">Qualidade baixa</button><button id="high">Qualidade máxima</button><button id="outage">Suspender sinalização por 5s</button>
+<button id="low">Vídeo reduzido</button><button id="high">Vídeo ampliado</button>
 <canvas width="1280" height="720"></canvas><div id="videos"></div><pre id="output">Pronto</pre>
 <script type="module">
 if (!import.meta.env.DEV) throw new Error('Development-only media audit')
 import { RoomSession } from './src/renderer/services/room-session.ts'
-import { CloudflareRoomService } from './src/renderer/services/cloudflare/room.ts'
+import { LiveKitRoomService } from './src/renderer/services/livekit/room.ts'
 import { MicrophoneService } from './src/renderer/services/microphone.ts'
 const output = document.querySelector('#output')
 const events = []
 const record = (event, data = {}) => { events.push({time: Math.round(performance.now()), event, ...data}); output.textContent = JSON.stringify(events.slice(-30), null, 2) }
 const name = new URLSearchParams(location.search).get('name') || 'Audit A'
 const roomCode = new URLSearchParams(location.search).get('room') || 'AUDT2345'
-const media = new CloudflareRoomService()
+const media = new LiveKitRoomService()
 const room = new RoomSession(media)
 let ctx, oscillator, frame = 0, drawing, stream
-let latestShares = []
 const audioPlayers = new Map()
 const mic = new MicrophoneService(room, (state, track, busy) => record('microphone', { ...state, busy }), message => record('error', {message}))
 navigator.mediaDevices.getUserMedia = async () => {
@@ -31,7 +30,6 @@ navigator.mediaDevices.getUserMedia = async () => {
 }
 room.onConnection(state => record('room', {state}))
 room.onSnapshot(snapshot => {
-  latestShares = snapshot.shares
   for (const voice of snapshot.remoteVoiceTracks) {
     let audio = audioPlayers.get(voice.key)
     if (!audio) { audio = new Audio(); audio.volume = 0; audio.srcObject = new MediaStream([voice.track]); audioPlayers.set(voice.key, audio); audio.play().catch(()=>{}) }
@@ -42,9 +40,14 @@ room.onSnapshot(snapshot => {
     if (!share.videoTrack) continue
     let video = [...container.children].find(v => v.dataset.key === share.key)
     if (!video) { video = document.createElement('video'); video.dataset.key = share.key; video.autoplay = true; video.muted = true; video.playsInline = true; container.append(video) }
-    if (video.srcObject?.getVideoTracks()[0] !== share.videoTrack) video.srcObject = new MediaStream([share.videoTrack])
+    if (video.srcObject?.getVideoTracks()[0] !== share.videoTrack) {
+      video.livekitTrack?.detach(video)
+      video.livekitTrack = share.livekitVideo
+      if (share.livekitVideo) share.livekitVideo.attach(video)
+      else video.srcObject = new MediaStream([share.videoTrack])
+    }
   }
-  for (const video of [...container.children]) if (!snapshot.shares.some(s => s.key === video.dataset.key && s.videoTrack)) video.remove()
+  for (const video of [...container.children]) if (!snapshot.shares.some(s => s.key === video.dataset.key && s.videoTrack)) { video.livekitTrack?.detach(video); video.remove() }
 })
 const action = (id, fn) => document.getElementById(id).onclick = async () => { const started = performance.now(); try { await fn(); record(id, {durationMs: Math.round(performance.now()-started)}) } catch(e) { record('error', {action:id, message:e.message}) } }
 action('join', async () => { await room.join(roomCode, name); await mic.prepare() })
@@ -57,11 +60,10 @@ action('share', async () => {
 action('stop', async () => { clearInterval(drawing); await room.unpublishScreen() })
 action('stats', async () => {
   const data = await media.getDiagnostics()
-  record('stats', {...data, events:data.events.slice(-12)})
+  record('stats', data)
 })
-action('low', () => latestShares.forEach(s => media.setVideoLayer(s.key, 'h')))
-action('high', () => latestShares.forEach(s => media.setVideoLayer(s.key, 'f')))
-action('outage', async () => { media.setSignalingAvailable(false); await new Promise(r=>setTimeout(r,5000)); media.setSignalingAvailable(true) })
+action('low', () => document.querySelectorAll('#videos video').forEach(v => v.style.width = '320px'))
+action('high', () => document.querySelectorAll('#videos video').forEach(v => v.style.width = '1280px'))
 action('leave', async () => { mic.reset(); clearInterval(drawing); oscillator?.stop(); await ctx?.close(); ctx=undefined; await room.disconnect() })
 window.addEventListener('pagehide', () => { mic.reset(); clearInterval(drawing) })
 </script></html>

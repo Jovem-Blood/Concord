@@ -2,7 +2,8 @@ import { io, type Socket } from 'socket.io-client'
 import { ACK_MS, PROTOCOL_VERSION, RECOVERY_MS, RENEW_BEFORE_MS, RETRY_MS, SOCKET_PATH, TYPING_MS, validContent,
   type ClientEvents, type Credentials, type ErrorCode, type Message, type Presence, type ReactionEmoji, type ReplyReference, type Result, type SendMessage, type ServerEvents, type SyncState } from '@concord/protocol'
 import type { CaptureResolution } from '../../shared/capture'
-import { CloudflareRoomService } from './cloudflare/room'
+import type { CloudflareRoomService } from './cloudflare/room'
+import { LiveKitRoomService } from './livekit/room'
 import type { RoomSnapshot } from './cloudflare/types'
 import type { VideoLayer } from './cloudflare/quality'
 import { RoomChat, type ChatSnapshot } from './room-chat'
@@ -12,7 +13,7 @@ import { logClient, startClientOperation, traceClientOperation, type ClientOpera
 type State = 'joining' | 'connected' | 'reconnecting' | 'disconnected'
 type RoomSocket = Socket<ServerEvents, ClientEvents>
 type Outgoing = { input: SendMessage; deadline: number; inFlight: boolean; operation: ClientOperation; timer?: ReturnType<typeof setTimeout> }
-export type MediaService = Pick<CloudflareRoomService, 'connect' | 'disconnect' | 'updateCredentials' | 'setSignalingAvailable' | 'updatePresence' | 'onSnapshot' | 'onConnection' | 'publishScreen' | 'unpublishScreen' | 'publishMicrophone' | 'unpublishMicrophone' | 'pauseShare' | 'resumeShare'> & Partial<Pick<CloudflareRoomService, 'setVideoLayer' | 'getDiagnostics'>>
+export type MediaService = Pick<CloudflareRoomService, 'connect' | 'disconnect' | 'updateCredentials' | 'setSignalingAvailable' | 'updatePresence' | 'onSnapshot' | 'onConnection' | 'publishScreen' | 'unpublishScreen' | 'publishMicrophone' | 'unpublishMicrophone' | 'pauseShare' | 'resumeShare'> & Partial<Pick<CloudflareRoomService, 'setVideoLayer'>> & { getDiagnostics?: () => Promise<unknown> }
 
 const explanations: Record<ErrorCode, string> = {
   UPDATE_REQUIRED: 'Atualize o Concord para entrar nesta sala.',
@@ -71,7 +72,7 @@ export class RoomSession {
     else if (this.loaded && elapsed >= 15_000 && this.socket?.connected) this.socket.io.engine?.close()
   }
 
-  constructor(private readonly media: MediaService = new CloudflareRoomService(),
+  constructor(private readonly media: MediaService = new LiveKitRoomService(),
     private readonly createSocket: () => RoomSocket = () => io(serverUrl, {
       path: SOCKET_PATH, transports: ['websocket'], autoConnect: false, forceNew: true,
       reconnection: true, reconnectionDelay: 500, reconnectionDelayMax: 3000, randomizationFactor: 0.5,
@@ -106,7 +107,10 @@ export class RoomSession {
     }
     if (generation !== this.generation) { this.sendLeave(credentials, false); throw new DOMException('Entrada cancelada.', 'AbortError') }
     this.credentials = credentials
-    await this.media.connect(credentials)
+    try { await this.media.connect(credentials) } catch (error) {
+      if (generation === this.generation) await this.disconnect()
+      throw error
+    }
     if (generation !== this.generation) throw new DOMException('Entrada cancelada.', 'AbortError')
     const socket = this.createSocket()
     this.socket = socket

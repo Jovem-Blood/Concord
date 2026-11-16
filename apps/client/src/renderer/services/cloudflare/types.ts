@@ -1,4 +1,5 @@
 import type { Presence } from '@concord/protocol'
+import type { RemoteVideoTrack } from 'livekit-client'
 
 export type MediaSource = 'microphone' | 'screen-video' | 'screen-audio'
 export type VoiceState = { joined: boolean; muted: boolean; deafened: boolean; microphoneAvailable: boolean }
@@ -10,6 +11,7 @@ export type RemoteShareView = {
   participantName: string
   streamName: string
   videoTrack?: MediaStreamTrack
+  livekitVideo?: RemoteVideoTrack
   audioTrack?: MediaStreamTrack
 }
 export type RoomSnapshot = { participants: ParticipantView[]; shares: RemoteShareView[]; remoteVoiceTracks: RemoteVoiceTrack[] }

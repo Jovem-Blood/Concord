@@ -341,8 +341,11 @@ export class CloudflareRoomService {
       })
       this.localTransceivers.set(source, transceiver)
       if (source === 'screen-video') {
+        // Concord shares moving video, not just static slides. Apply the policy
+        // here so native capture, browser capture and the audit use the same hint.
+        track.contentHint = 'motion'
         const parameters = transceiver.sender.getParameters()
-        parameters.degradationPreference = 'maintain-resolution'
+        parameters.degradationPreference = 'maintain-framerate'
         await transceiver.sender.setParameters(parameters)
       }
       // Prefer Opus for speech without rewriting negotiated SDP.
