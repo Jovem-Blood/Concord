@@ -11,6 +11,13 @@ class FakeTrack {
   constructor(readonly kind: string, readonly id: string) {}
   stop = vi.fn(() => { this.readyState = 'ended' })
 }
+class FakeSender {
+  parameters: RTCRtpSendParameters = { encodings: [], codecs: [], headerExtensions: [], rtcp: {}, transactionId: 'test' }
+  constructor(public track: FakeTrack | null) {}
+  async replaceTrack(track: FakeTrack | null) { this.track = track }
+  getParameters() { return structuredClone(this.parameters) }
+  setParameters = vi.fn(async (parameters: RTCRtpSendParameters) => { this.parameters = structuredClone(parameters) })
+}
 class FakePeer extends EventTarget {
   static instances: FakePeer[] = []
   connectionState = 'new'
@@ -18,10 +25,11 @@ class FakePeer extends EventTarget {
   onconnectionstatechange: (() => void) | null = null
   ontrack: ((event: { track: FakeTrack; transceiver: { mid: string } }) => void) | null = null
   localDescription: { toJSON: () => unknown } | null = null
-  transceivers: { mid: string; sender: { track: FakeTrack | null; replaceTrack: (t: FakeTrack | null) => Promise<void> }; receiver: { track: FakeTrack }; stop: () => void }[] = []
+  transceivers: { mid: string; sender: FakeSender; receiver: { track: FakeTrack }; stop: () => void }[] = []
   constructor() { super(); FakePeer.instances.push(this) }
-  addTransceiver(track: FakeTrack) {
-    const sender = { track: track as FakeTrack | null, replaceTrack: async (replacement: FakeTrack | null) => { sender.track = replacement } }
+  addTransceiver(track: FakeTrack, init: RTCRtpTransceiverInit) {
+    const sender = new FakeSender(track)
+    sender.parameters.encodings = structuredClone(init.sendEncodings ?? [])
     const transceiver = { mid: String(this.transceivers.length), sender, receiver: { track: new FakeTrack(track.kind, 'unused') }, stop: vi.fn() }
     this.transceivers.push(transceiver)
     return transceiver
@@ -35,7 +43,7 @@ class FakePeer extends EventTarget {
       const incoming = JSON.parse(description.sdp) as { mid: string; kind: string }[]
       for (const item of incoming) {
         const track = new FakeTrack(item.kind, `remote-${item.mid}`)
-        const transceiver = { mid: item.mid, sender: { track: null, replaceTrack: async () => undefined }, receiver: { track }, stop: vi.fn() }
+        const transceiver = { mid: item.mid, sender: new FakeSender(null), receiver: { track }, stop: vi.fn() }
         this.transceivers.push(transceiver)
         this.ontrack?.({ track, transceiver })
       }
@@ -111,6 +119,19 @@ function setup() {
 }
 
 describe('Cloudflare WebRTC room lifecycle', () => {
+  it('publishes two capped screen layers while preserving resolution and leaving audio unchanged', async () => {
+    const { connect, service, stream } = setup()
+    await connect()
+    await service.publishScreen(stream().media, '720p')
+    const senders = FakePeer.instances[0]!.transceivers.map(t => t.sender)
+    const video = senders.find(s => s.track?.kind === 'video')!
+    expect(video.parameters.degradationPreference).toBe('maintain-resolution')
+    expect(video.parameters.encodings).toEqual([
+      expect.objectContaining({ rid: 'h', maxBitrate: 500_000, scaleResolutionDownBy: 2 }),
+      expect.objectContaining({ rid: 'f', maxBitrate: 2_000_000, scaleResolutionDownBy: 1 }),
+    ])
+    expect(senders.find(s => s.track?.kind === 'audio')!.setParameters).not.toHaveBeenCalled()
+  })
   it('identifies signaling errors for classified diagnostics', () => {
     expect(new SignalingError(503)).toMatchObject({ name: 'SignalingError', status: 503 })
   })
@@ -124,14 +145,19 @@ describe('Cloudflare WebRTC room lifecycle', () => {
         const body = JSON.parse(String(options.body)); updates.push(body)
         return new Response(JSON.stringify({ tracks: [{ mid: body.mid }] }))
       }
-      if (url.endsWith('/tracks')) service.setVideoLayer('remote:remote-session', 'q')
+      if (url.endsWith('/tracks')) service.setVideoLayer('remote:remote-session', 'h')
       return original(url, options)
     })
     presence.tracks.push({ sessionId: 'remote-session', trackName: 'video', kind: 'video', source: 'screen-video', participantIdentity: 'remote', participantName: 'Remote', simulcast: true })
     service.updatePresence(presence)
     await vi.advanceTimersByTimeAsync(0)
-    expect(updates).toEqual([expect.objectContaining({ preferredRid: 'q' })])
-    expect(snapshots[snapshots.length - 1]!.shares[0]!.videoTrack).toBeDefined()
+    expect(updates).toEqual([expect.objectContaining({ preferredRid: 'h' })])
+    const videoTrack = snapshots[snapshots.length - 1]!.shares[0]!.videoTrack
+    expect(videoTrack).toBeDefined()
+    service.setVideoLayer('remote:remote-session', 'f')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(updates).toEqual([expect.objectContaining({ preferredRid: 'h' }), expect.objectContaining({ preferredRid: 'f' })])
+    expect(snapshots[snapshots.length - 1]!.shares[0]!.videoTrack).toBe(videoTrack)
     expect(FakePeer.instances).toHaveLength(1)
   })
   it.each([409, 429])('retries pre-negotiation HTTP %s without rebuilding healthy media', async (status) => {

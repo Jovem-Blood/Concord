@@ -11,11 +11,10 @@ const videoElement = ref<HTMLVideoElement | null>(null)
 const audioElement = ref<HTMLAudioElement | null>(null)
 const audioBlocked = ref(false)
 let frameCaptured = false
-let resizeObserver: ResizeObserver | undefined
 let qualityTimer: ReturnType<typeof setTimeout> | undefined
 function updateQuality(): void {
   clearTimeout(qualityTimer)
-  qualityTimer = setTimeout(() => emit('quality', layerForTile(videoElement.value?.clientWidth ?? 0, Boolean(props.hidden))), 300)
+  qualityTimer = setTimeout(() => emit('quality', layerForTile(Boolean(props.hidden))), 300)
 }
 
 function attach(): void {
@@ -91,11 +90,9 @@ watch([() => props.volume, () => props.level], applyLevel, { deep: true })
 watch(() => props.outputDeviceId, applyDevice)
 onMounted(() => {
   attach(); requestAnimationFrame(captureFrame)
-  resizeObserver = new ResizeObserver(updateQuality)
-  if (videoElement.value) resizeObserver.observe(videoElement.value)
   updateQuality()
 })
-onBeforeUnmount(() => { clearTimeout(qualityTimer); resizeObserver?.disconnect(); detach() })
+onBeforeUnmount(() => { clearTimeout(qualityTimer); detach() })
 </script>
 
 <template>

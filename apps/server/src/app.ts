@@ -236,7 +236,7 @@ export async function buildApp(
         const input = tracks.find((t) => t.trackName === source.trackName)!
         const section = (body.sessionDescription as { sdp: string }).sdp.split(/(?=^m=)/m)
           .find((section) => section.split(/\r?\n/).includes(`a=mid:${input.mid}`)) ?? ''
-        const simulcast = source.kind === 'video' && ['f', 'h', 'q'].every((rid) => section.includes(`a=rid:${rid} send`)) && section.includes('a=simulcast:send')
+        const simulcast = source.kind === 'video' && ['f', 'h'].every((rid) => section.includes(`a=rid:${rid} send`)) && section.includes('a=simulcast:send')
         member.published.set(track.mid, { mid: track.mid, trackName: source.trackName, kind: source.kind, source: input.source as MediaSource,
           ...(simulcast ? { simulcast: true } : {}) })
       }

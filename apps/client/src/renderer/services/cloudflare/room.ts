@@ -339,6 +339,12 @@ export class CloudflareRoomService {
       direction: 'sendonly', ...(mediaStream ? { streams: [mediaStream] } : {}),
       sendEncodings: track.kind === 'video' ? screenEncodings(this.resolution) : [{ maxBitrate: source === 'microphone' ? 64_000 : 128_000 }],
       })
+      this.localTransceivers.set(source, transceiver)
+      if (source === 'screen-video') {
+        const parameters = transceiver.sender.getParameters()
+        parameters.degradationPreference = 'maintain-resolution'
+        await transceiver.sender.setParameters(parameters)
+      }
       // Prefer Opus for speech without rewriting negotiated SDP.
       if (source === 'microphone' && typeof RTCRtpSender !== 'undefined') {
         const codecs = RTCRtpSender.getCapabilities('audio')?.codecs
@@ -346,7 +352,6 @@ export class CloudflareRoomService {
           transceiver.setCodecPreferences([...codecs].sort((a, b) => Number(b.mimeType.toLowerCase() === 'audio/opus') - Number(a.mimeType.toLowerCase() === 'audio/opus')))
         }
       }
-      this.localTransceivers.set(source, transceiver)
     }
     await pc.setLocalDescription(await pc.createOffer())
     // This HTTP signaling flow has no trickle ICE: include gathered candidates in SDP.

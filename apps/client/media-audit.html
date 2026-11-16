@@ -59,7 +59,7 @@ action('stats', async () => {
   const data = await media.getDiagnostics()
   record('stats', {...data, events:data.events.slice(-12)})
 })
-action('low', () => latestShares.forEach(s => media.setVideoLayer(s.key, 'q')))
+action('low', () => latestShares.forEach(s => media.setVideoLayer(s.key, 'h')))
 action('high', () => latestShares.forEach(s => media.setVideoLayer(s.key, 'f')))
 action('outage', async () => { media.setSignalingAvailable(false); await new Promise(r=>setTimeout(r,5000)); media.setSignalingAvailable(true) })
 action('leave', async () => { mic.reset(); clearInterval(drawing); oscillator?.stop(); await ctx?.close(); ctx=undefined; await room.disconnect() })

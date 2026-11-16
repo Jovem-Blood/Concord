@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Prefer the selected capture quality for visible streams instead of downgrading
+  based on tile width. Hidden streams still request the lowest layer, and SFU
+  bandwidth fallback and the selected resolution cap remain enabled.
+- Base screen sharing on LiveKit's 30-fps presets: 720p at 2 Mbps or 1080p at
+  5 Mbps, plus one half-resolution fallback at a quarter of the primary bitrate.
+  Prefer preserving resolution over frame rate under encoder pressure. Accept
+  both the new two-layer and existing three-layer publications on the API.
+
 ## 1.1.1
 
 ### Changes

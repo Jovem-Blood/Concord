@@ -91,12 +91,12 @@ describe('Cloudflare room signaling', () => {
     expect(closed.json().sessionDescription.type).toBe('answer')
     expect((await room(participant.headers)).json().tracks).toEqual([])
   })
-  it('advertises negotiated simulcast and authorizes quality updates within the room', async () => {
+  it.each(['f;h', 'f;h;q'])('advertises negotiated %s simulcast and authorizes quality updates within the room', async (layers) => {
     const { app, join, sfu, room } = await fixture()
     const publisher = await join()
     await app.inject({ method: 'POST', url: '/v1/session', headers: publisher.headers })
     await app.inject({ method: 'POST', url: '/v1/tracks', headers: publisher.headers, payload: {
-      sessionDescription: { type: 'offer', sdp: 'm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=mid:0\r\na=rid:f send\r\na=rid:h send\r\na=rid:q send\r\na=simulcast:send f;h;q\r\n' },
+      sessionDescription: { type: 'offer', sdp: `m=video 9 UDP/TLS/RTP/SAVPF 96\r\na=mid:0\r\n${layers.split(';').map(rid => `a=rid:${rid} send\r\n`).join('')}a=simulcast:send ${layers}\r\n` },
       tracks: [{ location: 'local', mid: '0', trackName: 'screen', kind: 'video', source: 'screen-video' }],
     } })
     expect((await room(publisher.headers)).json().tracks[0]!.simulcast).toBe(true)
@@ -106,10 +106,10 @@ describe('Cloudflare room signaling', () => {
       tracks: [{ location: 'remote', sessionId: 'session-1', trackName: 'screen', preferredRid: 'h' }],
     } })
     expect(sfu.request).toHaveBeenLastCalledWith('session-2', 'tracks/new', { tracks: [expect.objectContaining({ simulcast: { preferredRid: 'h', priorityOrdering: 'asciibetical', ridNotAvailable: 'asciibetical' } })] })
-    const payload = { mid: 'remote-0', sessionId: 'session-1', trackName: 'screen', preferredRid: 'q' }
+    const payload = { mid: 'remote-0', sessionId: 'session-1', trackName: 'screen', preferredRid: 'f' }
     const update = (body: unknown) => app.inject({ method: 'POST', url: '/v1/tracks/quality', headers: viewer.headers, payload: body as object })
     expect((await update(payload)).statusCode).toBe(200)
-    expect(sfu.request).toHaveBeenLastCalledWith('session-2', 'tracks/update', { tracks: [expect.objectContaining({ mid: 'remote-0', simulcast: expect.objectContaining({ preferredRid: 'q' }) })] })
+    expect(sfu.request).toHaveBeenLastCalledWith('session-2', 'tracks/update', { tracks: [expect.objectContaining({ mid: 'remote-0', simulcast: expect.objectContaining({ preferredRid: 'f' }) })] })
     expect((await update({ ...payload, mid: 'unowned' })).statusCode).toBe(400)
     expect((await update({ ...payload, preferredRid: 'unbounded' })).statusCode).toBe(400)
     expect((await update({ ...payload, sessionId: 'other-room' })).statusCode).toBe(403)

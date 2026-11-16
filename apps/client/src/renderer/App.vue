@@ -367,7 +367,7 @@ async function startSharing(
     localStream.value = stream
     const videoTrack = stream.getVideoTracks()[0]
     if (!videoTrack) throw new Error('Missing video track')
-    videoTrack.contentHint = 'motion'
+    videoTrack.contentHint = 'detail'
     videoTrack.onended = () => {
       logClient('warn', 'screen.capture.ended')
       void stopSharing()
