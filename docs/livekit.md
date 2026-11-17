@@ -1,47 +1,51 @@
-# LiveKit media
+# Media providers
 
-This branch uses the official LiveKit browser SDK for voice and screen sharing.
-The existing Concord API, room admission and Socket.IO chat remain in place.
-API, web and desktop use protocol 4 to prevent mixing incompatible media clients.
+Set `MEDIA_PROVIDER=livekit` or `MEDIA_PROVIDER=cloudflare` on the server.
+The public, uncached `/v1/media/config` endpoint tells web and desktop which
+backend to use on entry. There is no independent per-client switch or silent
+fallback: everyone on a server must use the same backend.
 
-Configure `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET` in the root
-`.env`, then rebuild API and clients. Compose passes these only to the server.
-No client build-time LiveKit secret or URL is required. Cloudflare Tunnel can
-continue exposing Concord HTTP/WebSocket traffic. LiveKit Cloud carries media
-directly between clients and its SFU; home port forwarding is unnecessary.
+LiveKit requires `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`.
+Cloudflare requires `CLOUDFLARE_SFU_APP_ID`, `CLOUDFLARE_SFU_APP_SECRET` and
+optionally both Cloudflare TURN variables. Credentials for the inactive backend
+may stay in `.env`; they are not selected or validated. Compose defaults to
+LiveKit. Outside Compose, omitting MEDIA_PROVIDER preserves legacy inference
+(LiveKit if any LiveKit credentials exist, otherwise Cloudflare).
 
-`POST /v1/livekit/token` requires a valid Concord participant token. The server
-chooses the room (`concord-<roomCode>`), identity and name, ignoring caller-supplied
-values. Tokens expire after ten minutes and permit microphone, screen video and
-screen audio publication plus subscriptions; chat stays on Concord Socket.IO.
-LiveKit refreshes connection tokens through its SDK while connected. Leaving or
-expiry of the Concord session also removes the LiveKit participant server-side.
+After deploying these changes, rebuild both server and web and update desktop
+clients: protocol 5 rejects old clients that could still publish simulcast.
+Subsequent provider changes require only editing the server environment and
+running `docker compose up -d --force-recreate server`. This ends active rooms;
+participants must rejoin. A client rebuild is not needed just to switch backend.
+Keep the existing public Concord URLs and origin configuration unchanged.
+Cloudflare Tunnel continues serving the Concord API/web; media goes to the
+chosen SFU. LiveKit Cloud does not require home port forwarding.
 
-The SDK owns negotiation, reconnection, simulcast RIDs, adaptive subscriptions
-and Dynacast. Remote video uses SDK `attach`/`detach` so visibility and dimensions
-drive adaptation. Visible small tiles may intentionally use a lower layer;
-focusing/enlarging the video lets the SDK request the larger layer. No Concord
-RID-selection loop or periodic quality forcing is used.
+Both backends now publish ONE video encoding per screen, with the selected
+720p/1080p capture ceiling and 30 fps cap (2/5 Mbps respective bitrate ceilings).
+Cloudflare uses one encoding without RIDs. LiveKit uses VP8 with simulcast,
+adaptiveStream and Dynacast disabled. No tile-driven layer selection or quality
+update endpoint remains. Browser congestion control can still reduce quality;
+a single encoding does not guarantee fixed resolution or frame rate.
 
-Screen capture still uses Concord's source picker, 720p/1080p ceiling and system
-audio handling on web and desktop. Publication uses LiveKit ScreenSharePresets
-at 30 fps and a motion/frame-rate preference for moving video. Under constrained
-resources the SDK/browser may still lower quality; this is not a guarantee of
-constant resolution or FPS. Microphone capture is prepared silently on entry.
+Microphone preparation, screen audio, mute/deafen, local playback controls,
+Concord room authorization and Socket.IO chat are preserved. LiveKit uses
+room-scoped server-issued tokens. Ctrl+Shift+D exports media diagnostics.
+`media-audit.html` now follows the selected provider too.
 
-Ctrl+Shift+D exports two local LiveKit RTP-stat samples without room tokens,
-credentials, SDP or network addresses. `media-audit.html` and `ui-audit.html`
-remain development-only synthetic capture tools, excluded from production builds.
+## Validation of provider switch and single encoding — 2026-11-17
 
-The old Cloudflare implementation is retained for historical tests but is not
-selected by the application. When LiveKit is configured, legacy Cloudflare SFU
-creation is disabled. LiveKit SDKs handle ICE/TURN; the old TURN settings are not
-required. Do not use the old Cloudflare audit results to claim LiveKit behavior.
+125 client tests and 57 server tests passed, along with typecheck, lint,
+production web build and Windows Electron packaging. Tests cover server provider
+selection with both sets of credentials present, client discovery/cancellation,
+single Cloudflare encoding without RIDs, subscriptions without layer preferences,
+and LiveKit publication with simulcast disabled. No new real-SFU browser session
+or production deployment was performed for this change.
 
-References:
-- https://docs.livekit.io/reference/client-sdk-js/
-- https://docs.livekit.io/transport/media/advanced/
-- https://docs.livekit.io/transport/media/screenshare/
+## Historical test results (before single-encoding change)
+
+The results below describe the previous simulcast implementation, not the
+current single-encoding implementation.
 
 ## Validation — 2026-11-16
 

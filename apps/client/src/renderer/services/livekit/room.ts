@@ -21,10 +21,10 @@ export class LiveKitRoomService {
   private connectionListener: (state: Connection) => void = () => undefined
 
   constructor(private readonly createRoom = () => new Room({
-    adaptiveStream: true,
-    dynacast: true,
+    adaptiveStream: false,
+    dynacast: false,
     disconnectOnPageLeave: true,
-    publishDefaults: { simulcast: true, videoCodec: 'vp8', stopMicTrackOnMute: false },
+    publishDefaults: { simulcast: false, videoCodec: 'vp8', stopMicTrackOnMute: false },
   })) {}
 
   onSnapshot(listener: (snapshot: RoomSnapshot) => void): void { this.snapshotListener = listener }
@@ -101,6 +101,7 @@ export class LiveKitRoomService {
           source: video ? Track.Source.ScreenShare : Track.Source.ScreenShareAudio,
           name: video ? 'screen' : 'screen-audio', stream: 'screen',
           ...(video ? {
+            simulcast: false, videoCodec: 'vp8' as const,
             screenShareEncoding: (resolution === '720p' ? ScreenSharePresets.h720fps30 : ScreenSharePresets.h1080fps30).encoding,
             degradationPreference: 'maintain-framerate' as const,
           } : { audioPreset: AudioPresets.musicHighQualityStereo }),

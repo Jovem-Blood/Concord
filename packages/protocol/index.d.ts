@@ -1,4 +1,4 @@
-export const PROTOCOL_VERSION: 4
+export const PROTOCOL_VERSION: 5
 export * from './telemetry.js'
 export const SOCKET_PATH: '/v2/realtime'
 export const RECOVERY_MS: number
@@ -15,7 +15,7 @@ export function validContent(content: unknown): content is string
 export type Credentials = { participantToken: string; identity: string; expiresAt: number }
 export type MediaSource = 'microphone' | 'screen-video' | 'screen-audio'
 export type ParticipantPresence = { identity: string; name: string; connection: 'connected' | 'reconnecting'; voice: { available: boolean; muted?: boolean } }
-export type PublishedTrack = { participantIdentity: string; participantName: string; sessionId: string; trackName: string; kind: 'audio' | 'video'; source: MediaSource; simulcast?: boolean }
+export type PublishedTrack = { participantIdentity: string; participantName: string; sessionId: string; trackName: string; kind: 'audio' | 'video'; source: MediaSource }
 export type Presence = { participants: ParticipantPresence[]; tracks: PublishedTrack[] }
 export type ReactionEmoji = '👍' | '❤️' | '😂' | '😮' | '😢' | '🎉'
 export type MessageReaction = { emoji: ReactionEmoji; senders: { id: string; name: string }[] }

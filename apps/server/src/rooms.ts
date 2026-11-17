@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { MAX_MESSAGES, REACTION_EMOJIS, RECOVERY_MS, TOKEN_MS, TYPING_MS, validContent,
   type Credentials, type ErrorCode, type MediaSource, type Message, type Presence, type ReactMessage, type SendMessage, type SyncRequest, type SyncState, type Typist } from '@concord/protocol'
 
-type Publication = { mid: string; trackName: string; kind: 'video' | 'audio'; source: MediaSource; simulcast?: boolean }
+type Publication = { mid: string; trackName: string; kind: 'video' | 'audio'; source: MediaSource }
 export type Participant = {
   identity: string; name: string; roomCode: string; expiresAt: number
   credentials: Credentials; pendingCredentials?: Credentials; tokens: Set<string>
@@ -213,7 +213,6 @@ export class RoomAuthority {
       tracks: members.flatMap((member) => [...member.published.values()].map((track) => ({
         participantIdentity: member.identity, participantName: member.name, sessionId: member.sessionId!,
         trackName: track.trackName, kind: track.kind, source: track.source,
-        ...(track.simulcast ? { simulcast: true } : {}),
       }))),
     }
   }

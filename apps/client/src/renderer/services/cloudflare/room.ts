@@ -6,10 +6,10 @@ import { logClient, startClientOperation, traceClientOperation, type ClientOpera
 import type { ClientOperationName } from '@concord/protocol'
 import { waitForIceGathering } from './ice'
 import { MediaDiagnostics } from './diagnostics'
-import { screenEncodings, type VideoLayer } from './quality'
+import { screenEncodings } from './quality'
 
 type ConnectionState = 'connected' | 'reconnecting' | 'disconnected'
-type Subscription = { source: PublishedTrack; mid: string; layer?: VideoLayer }
+type Subscription = { source: PublishedTrack; mid: string }
 const trackKey = (track: PublishedTrack) => `${track.sessionId}:${track.trackName}`
 
 export class SignalingError extends Error {
@@ -47,16 +47,6 @@ export class CloudflareRoomService {
   private failures = 0
   private connectionState: ConnectionState | null = null
   private pausedShares = new Set<string>()
-  private videoLayers = new Map<string, VideoLayer>()
-  setVideoLayer(shareKey: string, layer: VideoLayer): void {
-    if (this.videoLayers.get(shareKey) === layer) return
-    this.videoLayers.set(shareKey, layer)
-    this.presenceRevision++
-    this.reconcile()
-  }
-  private videoLayer(source: PublishedTrack): VideoLayer {
-    return this.videoLayers.get(`${source.participantIdentity}:${source.sessionId}`) ?? 'f'
-  }
   private iceServers: RTCIceServer[] = ICE_SERVERS
   private operation?: ClientOperation
 
@@ -201,7 +191,6 @@ export class CloudflareRoomService {
     this.disposePeer()
     this.presence = { participants: [], tracks: [] }
     this.pausedShares.clear()
-    this.videoLayers.clear()
     this.iceServers = ICE_SERVERS
     this.emitSnapshot()
     await this.queue.catch((error: unknown) => {
@@ -440,20 +429,17 @@ export class CloudflareRoomService {
     const added = wanted.filter((t) => !this.subscriptions.has(trackKey(t)))
     for (let offset = 0; offset < added.length; offset += 32) {
       const batch = added.slice(offset, offset + 32)
-      const requestedLayers = new Map(batch.map((source) => [trackKey(source), this.videoLayer(source)]))
       const pc = await this.ensurePeer()
       await this.observe('media.subscribe', async () => {
         let negotiated = false
         try {
           const result = await this.api<SfuResponse>('tracks', {
-            tracks: batch.map((t) => ({ location: 'remote', sessionId: t.sessionId, trackName: t.trackName,
-              ...(t.simulcast ? { preferredRid: requestedLayers.get(trackKey(t)) } : {}) })),
+            tracks: batch.map((t) => ({ location: 'remote', sessionId: t.sessionId, trackName: t.trackName })),
           })
           // ontrack may fire during setRemoteDescription, so register mids before negotiation.
           for (const track of result.tracks ?? []) {
             const source = batch.find((t) => t.sessionId === track.sessionId && t.trackName === track.trackName)
-            if (source && track.mid && !track.errorCode) this.subscriptions.set(trackKey(source), { source, mid: track.mid,
-              ...(source.simulcast ? { layer: requestedLayers.get(trackKey(source)) } : {}) })
+            if (source && track.mid && !track.errorCode) this.subscriptions.set(trackKey(source), { source, mid: track.mid })
           }
           // Partial track failures can accompany a valid offer for successful tracks.
           // Complete that exchange before retrying only the missing subscriptions.
@@ -470,23 +456,6 @@ export class CloudflareRoomService {
           throw error
         }
       })
-    }
-    for (const subscription of this.subscriptions.values()) {
-      const { source, mid } = subscription
-      const layer = this.videoLayer(source)
-      if (!source.simulcast || subscription.layer === layer) continue
-      try {
-        const result = await this.api<SfuResponse>('tracks/quality', { mid, sessionId: source.sessionId, trackName: source.trackName, preferredRid: layer })
-        await this.negotiate(result, this.pc!)
-        if (!result.tracks?.some((t) => t.mid === mid && !t.errorCode)) throw new Error('Incomplete quality response')
-        subscription.layer = layer
-        this.diagnostics.record('video.layer', undefined, layer)
-      } catch (error) {
-        // A quality preference is optional. Keep the current stream on rejected updates.
-        // A failed SDP exchange, however, cannot safely be reused.
-        if (this.pc?.signalingState !== 'stable') this.needsReset = true
-        throw error
-      }
     }
   }
 

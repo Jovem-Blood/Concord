@@ -10,14 +10,14 @@
 <script type="module">
 if (!import.meta.env.DEV) throw new Error('Development-only media audit')
 import { RoomSession } from './src/renderer/services/room-session.ts'
-import { LiveKitRoomService } from './src/renderer/services/livekit/room.ts'
+import { SelectableMediaService } from './src/renderer/services/media-provider.ts'
 import { MicrophoneService } from './src/renderer/services/microphone.ts'
 const output = document.querySelector('#output')
 const events = []
 const record = (event, data = {}) => { events.push({time: Math.round(performance.now()), event, ...data}); output.textContent = JSON.stringify(events.slice(-30), null, 2) }
 const name = new URLSearchParams(location.search).get('name') || 'Audit A'
 const roomCode = new URLSearchParams(location.search).get('room') || 'AUDT2345'
-const media = new LiveKitRoomService()
+const media = new SelectableMediaService()
 const room = new RoomSession(media)
 let ctx, oscillator, frame = 0, drawing, stream
 const audioPlayers = new Map()

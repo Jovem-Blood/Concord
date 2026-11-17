@@ -1,4 +1,9 @@
 <p align="center">
+
+> Media backend: set `MEDIA_PROVIDER=livekit` or `MEDIA_PROVIDER=cloudflare` in
+> the server `.env`. Both modes publish a single video encoding per screen.
+> See [media configuration](docs/livekit.md) for required credentials and switching.
+
   <img src="docs/assets/concord-banner.png" alt="Concord — screen, voice, and chat" width="100%" />
 </p>
 
@@ -73,7 +78,7 @@ flowchart LR
   Client <-->|screen and voice| SFU
 ```
 
-The server `RoomAuthority` owns membership, credentials and chat. `RoomSession` coordinates Socket.IO and the official LiveKit client SDK. The SDK owns media signaling, reconnection, adaptive subscriptions and Dynacast. Screen tracks use LiveKit's 720p/30 or 1080p/30 presets; moving video prioritizes frame rate. Video elements attach through the SDK so it can adapt to their size and visibility. No custom layer-selection loop is used. HTTP provides joining, room-scoped media tokens and best-effort departure delivery.
+The server `RoomAuthority` owns membership, credentials and chat. `RoomSession` coordinates Socket.IO and the server-selected media provider: LiveKit SDK or Concord Cloudflare SFU integration. Both publish one video encoding per screen with the selected 720p/1080p ceiling. Simulcast, tile-based layer selection and LiveKit Dynacast/adaptive subscriptions are disabled. Microphone preparation and media recovery are retained.
 
 Participant credentials rotate automatically before their two-hour expiry. Unexpected connection loss reserves the participant's identity and room slot for 30 seconds after detection (heartbeats take approximately 15 seconds to detect a silent failure). Working media continues during recovery, then stops if recovery expires. Refresh/Leave requires an explicit rejoin. A disconnected last participant does **not** preserve history during the recovery window: their next connection starts a new conversation. Run a single API instance; an API restart clears rooms and requires rejoining.
 
@@ -184,7 +189,7 @@ CI runs type checks, tests, lint, web/server builds, and Docker builds on pushes
 to `main` and pull requests. Deployment to the self-hosted machine is manual.
 The download reflects the latest tagged release; `main` may include newer work.
 
-Desktop, web and API must use room protocol 4 for LiveKit media. Older clients receive an update-required response. See [release notes](CHANGELOG.md).
+Desktop, web and API must use room protocol 5 for LiveKit media. Older clients receive an update-required response. See [release notes](CHANGELOG.md).
 
 SemVer tags such as `v1.0.0` trigger `.github/workflows/release.yml`. The tag must match `apps/client/package.json` and point to a commit contained in `main`. The workflow verifies the project, builds Windows and Linux artifacts, generates SHA-256 checksums, and publishes a GitHub Release.
 

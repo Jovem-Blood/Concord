@@ -14,7 +14,6 @@ export type SfuTrack = {
   sessionId?: string
   trackName?: string
   kind?: 'audio' | 'video'
-  simulcast?: { preferredRid: string; priorityOrdering: 'asciibetical'; ridNotAvailable: 'asciibetical' }
   errorCode?: string
 }
 export type SfuResponse = {

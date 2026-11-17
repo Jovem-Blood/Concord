@@ -129,38 +129,12 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     expect(video.track!.contentHint).toBe('motion')
     expect(video.parameters.degradationPreference).toBe('maintain-framerate')
     expect(video.parameters.encodings).toEqual([
-      expect.objectContaining({ rid: 'h', maxBitrate: 500_000, scaleResolutionDownBy: 2 }),
-      expect.objectContaining({ rid: 'f', maxBitrate: 2_000_000, scaleResolutionDownBy: 1 }),
+      { maxBitrate: 2_000_000, maxFramerate: 30 },
     ])
     expect(senders.find(s => s.track?.kind === 'audio')!.setParameters).not.toHaveBeenCalled()
   })
   it('identifies signaling errors for classified diagnostics', () => {
     expect(new SignalingError(503)).toMatchObject({ name: 'SignalingError', status: 503 })
-  })
-  it('applies a layer change requested during subscription without replacing its track', async () => {
-    const { connect, service, presence, fetcher, snapshots } = setup()
-    await connect()
-    const original = fetcher.getMockImplementation()!
-    const updates: unknown[] = []
-    fetcher.mockImplementation(async (url, options) => {
-      if (url.endsWith('/tracks/quality')) {
-        const body = JSON.parse(String(options.body)); updates.push(body)
-        return new Response(JSON.stringify({ tracks: [{ mid: body.mid }] }))
-      }
-      if (url.endsWith('/tracks')) service.setVideoLayer('remote:remote-session', 'h')
-      return original(url, options)
-    })
-    presence.tracks.push({ sessionId: 'remote-session', trackName: 'video', kind: 'video', source: 'screen-video', participantIdentity: 'remote', participantName: 'Remote', simulcast: true })
-    service.updatePresence(presence)
-    await vi.advanceTimersByTimeAsync(0)
-    expect(updates).toEqual([expect.objectContaining({ preferredRid: 'h' })])
-    const videoTrack = snapshots[snapshots.length - 1]!.shares[0]!.videoTrack
-    expect(videoTrack).toBeDefined()
-    service.setVideoLayer('remote:remote-session', 'f')
-    await vi.advanceTimersByTimeAsync(0)
-    expect(updates).toEqual([expect.objectContaining({ preferredRid: 'h' }), expect.objectContaining({ preferredRid: 'f' })])
-    expect(snapshots[snapshots.length - 1]!.shares[0]!.videoTrack).toBe(videoTrack)
-    expect(FakePeer.instances).toHaveLength(1)
   })
   it.each([409, 429])('retries pre-negotiation HTTP %s without rebuilding healthy media', async (status) => {
     const { connect, service, presence, fetcher, snapshots } = setup()

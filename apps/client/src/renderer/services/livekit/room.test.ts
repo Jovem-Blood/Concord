@@ -25,7 +25,7 @@ it('uses server-issued authorization and SDK screen presets without manually sel
   const video = track('video'), audio = track('audio')
   await service.publishScreen({ getTracks: () => [video, audio] } as unknown as MediaStream, '720p')
   expect(localParticipant.publishTrack).toHaveBeenCalledWith(video, expect.objectContaining({
-    source: Track.Source.ScreenShare, screenShareEncoding: ScreenSharePresets.h720fps30.encoding, degradationPreference: 'maintain-framerate',
+    source: Track.Source.ScreenShare, simulcast: false, videoCodec: 'vp8', screenShareEncoding: ScreenSharePresets.h720fps30.encoding, degradationPreference: 'maintain-framerate',
   }))
   expect(localParticipant.publishTrack).toHaveBeenCalledWith(audio, expect.objectContaining({ source: Track.Source.ScreenShareAudio }))
   expect(video.contentHint).toBe('motion')

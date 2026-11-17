@@ -1,4 +1,4 @@
-export const PROTOCOL_VERSION = 4
+export const PROTOCOL_VERSION = 5
 export { CLIENT_OPERATIONS, CLIENT_OUTCOMES, CLIENT_REASONS, validTraceparent, diagnosticStack, validClientEvent } from './telemetry.js'
 export const SOCKET_PATH = '/v2/realtime'
 export const RECOVERY_MS = 30_000

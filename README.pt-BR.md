@@ -1,4 +1,9 @@
 <p align="center">
+
+> Media backend: set `MEDIA_PROVIDER=livekit` or `MEDIA_PROVIDER=cloudflare` in
+> the server `.env`. Both modes publish a single video encoding per screen.
+> See [media configuration](docs/livekit.md) for required credentials and switching.
+
   <img src="docs/assets/concord-banner.png" alt="Concord — tela, voz e chat" width="100%" />
 </p>
 
@@ -73,7 +78,7 @@ flowchart LR
   Client <-->|tela e voz| SFU
 ```
 
-A `RoomAuthority` controla participantes, credenciais e chat. A `RoomSession` coordena Socket.IO e o SDK oficial do LiveKit, responsável por sinalização da mídia, reconexão, assinaturas adaptativas e Dynacast. As telas usam os presets 720p/30 ou 1080p/30 do SDK e priorizam fluidez para vídeo em movimento. Os elementos de vídeo usam `track.attach()` para adaptação por tamanho e visibilidade, sem nosso seletor manual de camadas. HTTP fornece entrada, tokens de mídia por sala e aviso de saída.
+A `RoomAuthority` controla participantes, credenciais e chat. A `RoomSession` coordena Socket.IO e o provedor escolhido no servidor: SDK LiveKit ou integração Cloudflare SFU do Concord. Ambos publicam apenas uma versão de vídeo por tela, com teto de 720p/1080p. Simulcast, seleção de camadas por tamanho e Dynacast/assinaturas adaptativas do LiveKit estão desativados. A preparação do microfone e a recuperação de mídia foram preservadas.
 
 As credenciais são renovadas automaticamente antes de expirar em duas horas. Uma queda inesperada reserva a identidade e a vaga por 30 segundos após a detecção (até aproximadamente 15 segundos de heartbeat para detectar uma falha silenciosa). A mídia continua durante a recuperação e para se o prazo expirar. Recarregar/sair exige entrar novamente. A última conexão cair apaga o histórico imediatamente, mesmo durante a reserva de reconexão. Execute uma única instância da API; reiniciá-la apaga as salas e exige entrar novamente.
 

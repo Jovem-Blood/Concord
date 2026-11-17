@@ -3,9 +3,8 @@ import { ACK_MS, PROTOCOL_VERSION, RECOVERY_MS, RENEW_BEFORE_MS, RETRY_MS, SOCKE
   type ClientEvents, type Credentials, type ErrorCode, type Message, type Presence, type ReactionEmoji, type ReplyReference, type Result, type SendMessage, type ServerEvents, type SyncState } from '@concord/protocol'
 import type { CaptureResolution } from '../../shared/capture'
 import type { CloudflareRoomService } from './cloudflare/room'
-import { LiveKitRoomService } from './livekit/room'
+import { SelectableMediaService } from './media-provider'
 import type { RoomSnapshot } from './cloudflare/types'
-import type { VideoLayer } from './cloudflare/quality'
 import { RoomChat, type ChatSnapshot } from './room-chat'
 import { requestJoinToken, serverUrl } from './server'
 import { logClient, startClientOperation, traceClientOperation, type ClientOperation } from './telemetry'
@@ -13,7 +12,7 @@ import { logClient, startClientOperation, traceClientOperation, type ClientOpera
 type State = 'joining' | 'connected' | 'reconnecting' | 'disconnected'
 type RoomSocket = Socket<ServerEvents, ClientEvents>
 type Outgoing = { input: SendMessage; deadline: number; inFlight: boolean; operation: ClientOperation; timer?: ReturnType<typeof setTimeout> }
-export type MediaService = Pick<CloudflareRoomService, 'connect' | 'disconnect' | 'updateCredentials' | 'setSignalingAvailable' | 'updatePresence' | 'onSnapshot' | 'onConnection' | 'publishScreen' | 'unpublishScreen' | 'publishMicrophone' | 'unpublishMicrophone' | 'pauseShare' | 'resumeShare'> & Partial<Pick<CloudflareRoomService, 'setVideoLayer'>> & { getDiagnostics?: () => Promise<unknown> }
+export type MediaService = Pick<CloudflareRoomService, 'connect' | 'disconnect' | 'updateCredentials' | 'setSignalingAvailable' | 'updatePresence' | 'onSnapshot' | 'onConnection' | 'publishScreen' | 'unpublishScreen' | 'publishMicrophone' | 'unpublishMicrophone' | 'pauseShare' | 'resumeShare'> & { getDiagnostics?: () => Promise<unknown> }
 
 const explanations: Record<ErrorCode, string> = {
   UPDATE_REQUIRED: 'Atualize o Concord para entrar nesta sala.',
@@ -72,7 +71,7 @@ export class RoomSession {
     else if (this.loaded && elapsed >= 15_000 && this.socket?.connected) this.socket.io.engine?.close()
   }
 
-  constructor(private readonly media: MediaService = new LiveKitRoomService(),
+  constructor(private readonly media: MediaService = new SelectableMediaService(),
     private readonly createSocket: () => RoomSocket = () => io(serverUrl, {
       path: SOCKET_PATH, transports: ['websocket'], autoConnect: false, forceNew: true,
       reconnection: true, reconnectionDelay: 500, reconnectionDelayMax: 3000, randomizationFactor: 0.5,
@@ -452,7 +451,6 @@ export class RoomSession {
   }
   unpublishMicrophone(): Promise<void> { return this.media.unpublishMicrophone() }
   pauseShare(key: string): Promise<void> { return this.media.pauseShare(key) }
-  setVideoLayer(key: string, layer: VideoLayer): void { this.media.setVideoLayer?.(key, layer) }
   getDiagnostics() { return this.media.getDiagnostics?.() }
   resumeShare(key: string): Promise<void> { return this.media.resumeShare(key) }
 }

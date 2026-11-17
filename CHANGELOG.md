@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Select LiveKit or the original Cloudflare SFU using server MEDIA_PROVIDER;
+  web and desktop discover the active provider without separate client builds.
+- Remove simulcast layers, RID selection and quality updates. Each screen sends
+  one video encoding in both backends. Keep microphone preparation and recovery.
+- Bump protocol to 5; rebuild server/web and update desktop for this change.
+
+### Earlier work on this branch
+
 - Replace the application's Cloudflare media transport with the official LiveKit
   SDK: room-scoped server tokens, screen/audio publication, adaptive subscriptions,
   Dynacast and SDK reconnection. Keep Concord room admission, chat and capture UI.

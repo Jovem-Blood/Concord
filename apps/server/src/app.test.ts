@@ -91,28 +91,27 @@ describe('Cloudflare room signaling', () => {
     expect(closed.json().sessionDescription.type).toBe('answer')
     expect((await room(participant.headers)).json().tracks).toEqual([])
   })
-  it.each(['f;h', 'f;h;q'])('advertises negotiated %s simulcast and authorizes quality updates within the room', async (layers) => {
+  it('selects Cloudflare and subscribes to a single video without layer preferences', async () => {
     const { app, join, sfu, room } = await fixture()
+    const selected = await app.inject('/v1/media/config')
+    expect(selected.json()).toEqual({ provider: 'cloudflare' })
+    expect(selected.headers['cache-control']).toBe('no-store')
     const publisher = await join()
     await app.inject({ method: 'POST', url: '/v1/session', headers: publisher.headers })
     await app.inject({ method: 'POST', url: '/v1/tracks', headers: publisher.headers, payload: {
-      sessionDescription: { type: 'offer', sdp: `m=video 9 UDP/TLS/RTP/SAVPF 96\r\na=mid:0\r\n${layers.split(';').map(rid => `a=rid:${rid} send\r\n`).join('')}a=simulcast:send ${layers}\r\n` },
+      sessionDescription: { type: 'offer', sdp: 'm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=mid:0\r\n' },
       tracks: [{ location: 'local', mid: '0', trackName: 'screen', kind: 'video', source: 'screen-video' }],
     } })
-    expect((await room(publisher.headers)).json().tracks[0]!.simulcast).toBe(true)
+    expect((await room(publisher.headers)).json().tracks).toHaveLength(1)
     const viewer = await join()
     await app.inject({ method: 'POST', url: '/v1/session', headers: viewer.headers })
-    await app.inject({ method: 'POST', url: '/v1/tracks', headers: viewer.headers, payload: {
-      tracks: [{ location: 'remote', sessionId: 'session-1', trackName: 'screen', preferredRid: 'h' }],
+    const result = await app.inject({ method: 'POST', url: '/v1/tracks', headers: viewer.headers, payload: {
+      tracks: [{ location: 'remote', sessionId: 'session-1', trackName: 'screen' }],
     } })
-    expect(sfu.request).toHaveBeenLastCalledWith('session-2', 'tracks/new', { tracks: [expect.objectContaining({ simulcast: { preferredRid: 'h', priorityOrdering: 'asciibetical', ridNotAvailable: 'asciibetical' } })] })
-    const payload = { mid: 'remote-0', sessionId: 'session-1', trackName: 'screen', preferredRid: 'f' }
-    const update = (body: unknown) => app.inject({ method: 'POST', url: '/v1/tracks/quality', headers: viewer.headers, payload: body as object })
-    expect((await update(payload)).statusCode).toBe(200)
-    expect(sfu.request).toHaveBeenLastCalledWith('session-2', 'tracks/update', { tracks: [expect.objectContaining({ mid: 'remote-0', simulcast: expect.objectContaining({ preferredRid: 'f' }) })] })
-    expect((await update({ ...payload, mid: 'unowned' })).statusCode).toBe(400)
-    expect((await update({ ...payload, preferredRid: 'unbounded' })).statusCode).toBe(400)
-    expect((await update({ ...payload, sessionId: 'other-room' })).statusCode).toBe(403)
+    expect(result.statusCode).toBe(200)
+    expect(sfu.request).toHaveBeenLastCalledWith('session-2', 'tracks/new', { tracks: [
+      { location: 'remote', sessionId: 'session-1', trackName: 'screen', kind: 'video' },
+    ] })
   })
   it('shares mute state through presence without requiring media renegotiation', async () => {
     const { join, room, sfu } = await fixture()

@@ -59,6 +59,9 @@ cleanup() { rm -f "$server_tmp" "$client_tmp"; }
 trap cleanup EXIT HUP INT TERM
 cat >"$server_tmp" <<EOF
 # Fill with your LiveKit project credentials. Keep private.
+MEDIA_PROVIDER=livekit
+CLOUDFLARE_SFU_APP_ID=
+CLOUDFLARE_SFU_APP_SECRET=
 LIVEKIT_URL=
 LIVEKIT_API_KEY=
 LIVEKIT_API_SECRET=
