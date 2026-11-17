@@ -120,7 +120,7 @@ function setup() {
 }
 
 describe('Cloudflare WebRTC room lifecycle', () => {
-  it('publishes two capped screen layers with a motion policy and leaves audio unchanged', async () => {
+  it('publishes one capped screen encoding with a motion policy and leaves audio unchanged', async () => {
     const { connect, service, stream } = setup()
     await connect()
     await service.publishScreen(stream().media, '720p')
@@ -469,21 +469,31 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     expect(microphone.readyState).toBe('live')
     expect(snapshots[snapshots.length - 1]!.shares).toEqual([])
   })
-  it('recovers an unexpectedly ended receiver track while retaining the live microphone', async () => {
-    const { connect, service, presence, snapshots, update } = setup()
+  it('resubscribes an ended receiver without interrupting screen audio or republishing the microphone', async () => {
+    const { connect, service, presence, snapshots, update, calls } = setup()
     await connect()
     const microphone = new FakeTrack('audio', 'microphone')
     await service.publishMicrophone(microphone as unknown as MediaStreamTrack)
-    presence.tracks.push({ sessionId: 'remote-session', trackName: 'video', kind: 'video', source: 'screen-video', participantIdentity: 'remote', participantName: 'Remote' })
+    const publisher = { sessionId: 'remote-session', participantIdentity: 'remote', participantName: 'Remote' }
+    presence.tracks.push(
+      { ...publisher, trackName: 'video', kind: 'video', source: 'screen-video' },
+      { ...publisher, trackName: 'audio', kind: 'audio', source: 'screen-audio' },
+    )
     await update()
-    const oldTrack = snapshots[snapshots.length - 1]!.shares[0]!.videoTrack as unknown as FakeTrack
+    const share = snapshots[snapshots.length - 1]!.shares[0]!
+    const oldTrack = share.videoTrack as unknown as FakeTrack
+    const before = calls.length
     oldTrack.stop()
     oldTrack.onended?.()
     await vi.advanceTimersByTimeAsync(3_000)
     expect(snapshots[snapshots.length - 1]!.shares[0]!.videoTrack).toBeDefined()
     expect(snapshots[snapshots.length - 1]!.shares[0]!.videoTrack).not.toBe(oldTrack)
     expect(microphone.readyState).toBe('live')
-    expect(FakePeer.instances).toHaveLength(2)
+    expect(FakePeer.instances).toHaveLength(1)
+    expect(snapshots[snapshots.length - 1]!.shares[0]!.audioTrack).toBe(share.audioTrack)
+    expect(calls.slice(before).filter(call => call.path === 'tracks').map(call => call.body.tracks)).toEqual([
+      [{ location: 'remote', sessionId: publisher.sessionId, trackName: 'video' }],
+    ])
   })
   it('applies the closure answer even when an individual close fails, then restores other sources', async () => {
     const { connect, service, stream, fetcher, states } = setup()

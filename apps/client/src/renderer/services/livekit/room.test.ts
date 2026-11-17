@@ -25,7 +25,7 @@ it('uses server-issued authorization and SDK screen presets without manually sel
   const video = track('video'), audio = track('audio')
   await service.publishScreen({ getTracks: () => [video, audio] } as unknown as MediaStream, '720p')
   expect(localParticipant.publishTrack).toHaveBeenCalledWith(video, expect.objectContaining({
-    source: Track.Source.ScreenShare, simulcast: false, videoCodec: 'vp8', screenShareEncoding: ScreenSharePresets.h720fps30.encoding, degradationPreference: 'maintain-framerate',
+    source: Track.Source.ScreenShare, simulcast: false, videoCodec: 'vp8', backupCodec: false, screenShareEncoding: ScreenSharePresets.h720fps30.encoding, degradationPreference: 'maintain-framerate',
   }))
   expect(localParticipant.publishTrack).toHaveBeenCalledWith(audio, expect.objectContaining({ source: Track.Source.ScreenShareAudio }))
   expect(video.contentHint).toBe('motion')
@@ -45,6 +45,25 @@ it('withdraws an already-published video if publishing screen audio fails', asyn
   expect(video.stop).toHaveBeenCalled()
   expect(audio.stop).toHaveBeenCalled()
   await service.disconnect()
+})
+
+it('keeps publisher and subscriber transport measurements distinct in the export', async () => {
+  const { room, localParticipant, service, connect } = fixture()
+  await connect()
+  const publication = (type: string, rtt: number) => ({
+    source: Track.Source.ScreenShare,
+    track: { getRTCStatsReport: async () => new Map<string, object>([
+      ['video', { type, kind: 'video', mid: '0', framesPerSecond: 25 }],
+      ['pair', { type: 'candidate-pair', state: 'succeeded', nominated: true, currentRoundTripTime: rtt }],
+    ]) },
+  })
+  localParticipant.trackPublications.set('local', publication('outbound-rtp', 0.02))
+  room.remoteParticipants.set('remote', { trackPublications: new Map([['screen', publication('inbound-rtp', 0.05)]]) })
+  const snapshot = await service.getDiagnostics()
+  expect(snapshot.tracks).toEqual(['outbound-rtp', 'inbound-rtp'].map(type => ({
+    source: Track.Source.ScreenShare, type, kind: 'video', mid: '0', framesPerSecond: 25,
+  })))
+  expect(snapshot.transport).toEqual({ publisher: { currentRoundTripTime: 0.02 }, subscriber: { currentRoundTripTime: 0.05 } })
 })
 
 it('does not leave a late publication active after leaving the room', async () => {

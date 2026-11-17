@@ -251,13 +251,14 @@ export class CloudflareRoomService {
     }
     pc.ontrack = (event) => {
       if (this.pc !== pc) return
+      const mid = event.transceiver.mid
       event.track.onended = () => {
         if (this.pc !== pc) return
         this.emitSnapshot()
-        if ([...this.subscriptions.values()].some((subscription) => subscription.mid === event.transceiver.mid &&
+        if ([...this.subscriptions.values()].some((subscription) => subscription.mid === mid &&
           this.presence.tracks.some((source) => trackKey(source) === trackKey(subscription.source)))) {
           logClient('warn', 'media.remote_track.ended')
-          this.signalReconnecting()
+          this.schedule()
         }
       }
       this.emitSnapshot()
@@ -382,7 +383,7 @@ export class CloudflareRoomService {
     const mids = transceivers.map((t) => t.mid).filter((mid): mid is string => mid !== null)
     try {
       for (const transceiver of transceivers) {
-        await transceiver.sender.replaceTrack(null)
+        if (transceiver.sender.track) await transceiver.sender.replaceTrack(null)
         transceiver.stop()
       }
       if (!mids.length) return
@@ -411,14 +412,16 @@ export class CloudflareRoomService {
       await this.publish()
     }
     // Warm the transport as soon as room signaling is ready, even for a muted viewer.
-    await this.ensurePeer()
+    const transceivers = (await this.ensurePeer()).getTransceivers()
     const wanted = this.presence.tracks.filter((t) => t.participantIdentity !== this.credentials!.identity &&
       (t.source === 'microphone' || !this.pausedShares.has(`${t.participantIdentity}:${t.sessionId}`)))
     const keys = new Set(wanted.map(trackKey))
-    const removed = [...this.subscriptions.entries()].filter(([key]) => !keys.has(key))
+    // Close just the missing or ended receivers. Still-advertised tracks are pulled again below.
+    const removed = [...this.subscriptions.entries()].filter(([key, { mid }]) =>
+      !keys.has(key) || transceivers.find(t => t.mid === mid)?.receiver.track.readyState !== 'live')
     if (removed.length) {
       await this.closeTransceivers(removed.flatMap(([, subscription]) =>
-        this.pc?.getTransceivers().filter((t) => t.mid === subscription.mid) ?? []))
+        transceivers.filter((t) => t.mid === subscription.mid)))
       for (const [key, subscription] of removed) {
         const transceiver = this.pc?.getTransceivers().find((t) => t.mid === subscription.mid)
         transceiver?.receiver.track.stop()

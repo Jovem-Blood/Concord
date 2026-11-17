@@ -49,3 +49,46 @@ Conectividade que exige relay TURN precisa de `CLOUDFLARE_TURN_KEY_ID` e
 se TURN está habilitado. Se ocorrer um timeout, registre `causeMessage` do console
 local e os estados da conexão ICE; uma conexão posterior bem-sucedida não
 estabelece a causa da falha anterior.
+
+## Gameplay com movimento intenso
+
+1. Use duas máquinas em redes diferentes. Registre o commit, o provedor retornado
+   por `GET /v1/media/config`, a versão de cada cliente e a resolução selecionada.
+   Faça uma rodada com Electron transmitindo para web e outra no sentido inverso.
+2. Em 720p, reproduza 30 s de movimento leve e 60 s do mesmo replay com explosões
+   e partículas. Em cada trecho, pressione Ctrl+Shift+D nas duas pontas durante
+   o movimento. Guarde os arquivos por ponta e trecho e marque o instante de cada
+   travada visível. Repita em 1080p. Use o mesmo replay para comparar versões.
+3. Cada JSON contém duas amostras com cerca de 2 s de intervalo. Para o mesmo
+   fluxo, divida a diferença dos contadores pelo intervalo de `timestamp` em
+   segundos (o campo está em ms). Na origem use `media-source.frames`, no envio
+   use `outbound-rtp.framesEncoded` e na recepção use `inbound-rtp.framesReceived`
+   e `framesDecoded`. Registre também as dimensões RTP e o bitrate enviado
+   (8 × diferença de `bytesSent` / segundos). Campos ausentes indicam medição
+   indisponível. Após uma reconexão, inicie uma nova comparação.
+4. Compare as variações de `framesDropped`, `freezeCount`, `totalFreezesDuration`
+   e `packetsLost` no receptor com `qualityLimitationReason` no emissor e o RTT
+   até o SFU (`currentRoundTripTime`, em segundos). Anote em qual etapa os FPS
+   caíram primeiro. Os 30 FPS do seletor são o limite solicitado.
+5. Repita com voz, áudio do sistema e uma segunda tela. Mude o foco, encerre uma
+   tela e interrompa brevemente só a sinalização da sala. Confira a continuidade
+   do outro vídeo e do áudio, a remoção da tela encerrada e a retomada do chat.
+   Repita em uma instância de teste de cada provedor.
+
+### Referência local de 17/11/2026
+
+No Windows, dois peers WebRTC na mesma máquina usaram Electron 44.0.0,
+Chromium 152.0.7977.54 e VP8. Um canvas desenhou 150 quadrados em movimento.
+O ensaio usou `screenEncodings`, `motion`, `maintain-framerate` e o filtro de
+estatísticas do cliente. Cada perfil negociou uma codificação sem RID.
+
+| Fonte | Teto | Envio médio | FPS fonte / codificados / recebidos / decodificados | Resolução recebida ao fim |
+| --- | --- | --- | --- | --- |
+| 1280×720 | 2 Mb/s | 1,92 Mb/s | 30 / 30 / 30 / 30 | 1280×720 |
+| 1920×1080 | 5 Mb/s | 3,11 Mb/s | 30 / 30 / 30 / 29,9 | 1920×1080 |
+
+As médias cobrem 30 s após 3 s de aquecimento. Nesse intervalo, os contadores de
+descartes, congelamentos e pacotes perdidos tiveram variação zero. Em uma execução
+curta separada, ambos os perfis ainda entregavam 480×270 ao fim de 2 s de medição
+com `qualityLimitationReason=bandwidth`. Captura de jogo, SFU e redes entre máquinas
+ficam para o teste acima.

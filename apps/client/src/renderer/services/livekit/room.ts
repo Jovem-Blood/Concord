@@ -3,6 +3,7 @@ import { Room, RoomEvent, Track, RemoteVideoTrack, ScreenSharePresets, AudioPres
 import type { Credentials, Presence } from '@concord/protocol'
 import type { CaptureResolution } from '../../../shared/capture'
 import type { RoomSnapshot, RemoteShareView } from '../cloudflare/types'
+import { summarizeRtcStats } from '../cloudflare/diagnostics'
 import { serverUrl } from '../server'
 
 type Connection = 'connected' | 'reconnecting' | 'disconnected'
@@ -101,7 +102,7 @@ export class LiveKitRoomService {
           source: video ? Track.Source.ScreenShare : Track.Source.ScreenShareAudio,
           name: video ? 'screen' : 'screen-audio', stream: 'screen',
           ...(video ? {
-            simulcast: false, videoCodec: 'vp8' as const,
+            simulcast: false, videoCodec: 'vp8' as const, backupCodec: false,
             screenShareEncoding: (resolution === '720p' ? ScreenSharePresets.h720fps30 : ScreenSharePresets.h1080fps30).encoding,
             degradationPreference: 'maintain-framerate' as const,
           } : { audioPreset: AudioPresets.musicHighQualityStereo }),
@@ -193,19 +194,18 @@ export class LiveKitRoomService {
   async getDiagnostics() {
     const room = this.room
     const tracks: Record<string, unknown>[] = []
+    const transport: Record<string, ReturnType<typeof summarizeRtcStats>['transport']> = {}
     for (const participant of room ? [room.localParticipant, ...room.remoteParticipants.values()] : []) {
       for (const publication of participant.trackPublications.values()) {
         const stats = await publication.track?.getRTCStatsReport()
-        stats?.forEach(stat => {
-          if (!['inbound-rtp', 'outbound-rtp'].includes(stat.type)) return
-          const keys = ['type', 'kind', 'rid', 'bytesSent', 'bytesReceived', 'packetsLost', 'packetsReceived', 'jitter',
-            'framesEncoded', 'framesDecoded', 'framesDropped', 'framesPerSecond', 'frameWidth', 'frameHeight',
-            'freezeCount', 'totalFreezesDuration', 'qualityLimitationReason']
-          tracks.push({ source: publication.source, ...Object.fromEntries(keys.filter(key =>
-            typeof stat[key] === 'string' || typeof stat[key] === 'number').map(key => [key, stat[key]])) })
-        })
+        if (!stats) continue
+        const summary = summarizeRtcStats(stats)
+        tracks.push(...summary.tracks.map(track => ({ source: publication.source, ...track })))
+        if (Object.keys(summary.transport).length) {
+          transport[participant === room?.localParticipant ? 'publisher' : 'subscriber'] = summary.transport
+        }
       }
     }
-    return { provider: 'livekit', capturedAt: Date.now(), connection: room?.state ?? 'disconnected', tracks }
+    return { provider: 'livekit', capturedAt: Date.now(), connection: room?.state ?? 'disconnected', tracks, transport }
   }
 }

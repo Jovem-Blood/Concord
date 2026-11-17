@@ -19,7 +19,7 @@ const resolutionOptions = [
   { value: '720p', label: '720p', description: 'Recomendado' },
   { value: '1080p', label: '1080p', description: 'Alta definição' },
 ] as const
-const frameRateOptions = [{ value: '30', label: '30 FPS', description: 'Fixo' }] as const
+const frameRateOptions = [{ value: '30', label: 'Até 30 FPS' }] as const
 const loading = ref(isElectron)
 const error = ref('')
 const dialog = ref<HTMLElement | null>(null)

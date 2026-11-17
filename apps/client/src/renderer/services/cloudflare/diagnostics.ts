@@ -1,4 +1,42 @@
 // Local, bounded diagnostics: never retain SDP, credentials, device names or IP addresses.
+const rtpFields = ['type', 'kind', 'timestamp', 'mid', 'rid', 'bytesReceived', 'bytesSent', 'packetsLost', 'packetsSent',
+  'packetsReceived', 'fractionLost', 'roundTripTime', 'jitter', 'framesReceived', 'framesDecoded', 'framesEncoded',
+  'framesDropped', 'framesPerSecond', 'frameWidth', 'frameHeight', 'freezeCount', 'totalFreezesDuration',
+  'qualityLimitationReason', 'totalEncodeTime', 'totalDecodeTime', 'totalAudioEnergy']
+
+function fields(stat: Record<string, unknown>, keys: string[]): Record<string, string | number> {
+  const result: Record<string, string | number> = {}
+  for (const key of keys) {
+    const value = stat[key]
+    if (typeof value === 'number' || typeof value === 'string') result[key] = value
+  }
+  return result
+}
+
+export function summarizeRtcStats(stats?: RTCStatsReport) {
+  const tracks: Record<string, string | number>[] = []
+  let selectedPair: Record<string, unknown> | undefined
+  let nominatedPair: Record<string, unknown> | undefined
+  stats?.forEach(stat => {
+    if (['inbound-rtp', 'outbound-rtp', 'remote-inbound-rtp'].includes(stat.type)) {
+      const track = fields(stat, rtpFields)
+      if (stat.type === 'remote-inbound-rtp') {
+        const mid = stats.get(stat.localId)?.mid
+        if (typeof mid === 'string') track.mid = mid
+      }
+      tracks.push(track)
+    } else if (stat.type === 'media-source' && stat.kind === 'video') {
+      tracks.push(fields(stat, ['type', 'kind', 'timestamp', 'width', 'height', 'frames', 'framesPerSecond']))
+    } else if (stat.type === 'transport' && stat.selectedCandidatePairId) {
+      selectedPair = stats.get(stat.selectedCandidatePairId)
+    } else if (stat.type === 'candidate-pair' && stat.state === 'succeeded' && stat.nominated) {
+      nominatedPair = stat
+    }
+  })
+  const transport = fields(selectedPair ?? nominatedPair ?? {}, ['currentRoundTripTime', 'availableOutgoingBitrate', 'bytesSent', 'bytesReceived'])
+  return { tracks, transport }
+}
+
 export type MediaEvent = { at: number; name: string; durationMs?: number; outcome?: string }
 export class MediaDiagnostics {
   private events: MediaEvent[] = []
@@ -7,24 +45,8 @@ export class MediaDiagnostics {
     if (this.events.length > 120) this.events.shift()
   }
   async snapshot(pc: RTCPeerConnection | null) {
-    const tracks: Record<string, string | number>[] = []
-    let transport: Record<string, number> = {}
-    if (pc && pc.connectionState !== 'closed') {
-      const stats = await pc.getStats()
-      stats.forEach((stat) => {
-        if (stat.type === 'inbound-rtp' || stat.type === 'outbound-rtp') {
-          const keys = ['type', 'kind', 'mid', 'rid', 'bytesReceived', 'bytesSent', 'packetsLost', 'packetsReceived', 'jitter',
-            'framesDecoded', 'framesEncoded', 'framesDropped', 'framesPerSecond', 'frameWidth', 'frameHeight',
-            'freezeCount', 'totalFreezesDuration', 'qualityLimitationReason', 'totalEncodeTime', 'totalDecodeTime', 'totalAudioEnergy']
-          tracks.push(Object.fromEntries(keys.filter((key) => typeof stat[key] === 'string' || typeof stat[key] === 'number').map((key) => [key, stat[key]])))
-        }
-        if (stat.type === 'candidate-pair' && stat.state === 'succeeded' && stat.nominated) {
-          transport = Object.fromEntries(['currentRoundTripTime', 'availableOutgoingBitrate', 'bytesSent', 'bytesReceived']
-            .filter((key) => typeof stat[key] === 'number').map((key) => [key, stat[key]]))
-        }
-      })
-    }
-    return { capturedAt: Date.now(), connection: pc?.connectionState ?? 'absent', signaling: pc?.signalingState ?? 'absent',
-      transport, tracks, events: this.events.map((event) => ({ ...event })) }
+    const stats = pc && pc.connectionState !== 'closed' ? await pc.getStats() : undefined
+    return { provider: 'cloudflare', capturedAt: Date.now(), connection: pc?.connectionState ?? 'absent', signaling: pc?.signalingState ?? 'absent',
+      ...summarizeRtcStats(stats), events: this.events.map((event) => ({ ...event })) }
   }
 }
