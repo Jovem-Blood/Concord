@@ -1,33 +1,22 @@
 # Changelog
 
-## Unreleased
+## 1.2.0
 
-- Select LiveKit or the original Cloudflare SFU using server MEDIA_PROVIDER;
-  web and desktop discover the active provider without separate client builds.
-- Remove simulcast layers, RID selection and quality updates. Each screen sends
-  one video encoding in both backends. Keep microphone preparation and recovery.
-- Bump protocol to 5; rebuild server/web and update desktop for this change.
+### Compatibility
 
-### Earlier work on this branch
+- Update the desktop app before joining a room on the current Concord server.
+  Desktop, web and API use room protocol 5. Self-hosters should update all three together.
 
-- Replace the application's Cloudflare media transport with the official LiveKit
-  SDK: room-scoped server tokens, screen/audio publication, adaptive subscriptions,
-  Dynacast and SDK reconnection. Keep Concord room admission, chat and capture UI.
-- Require LiveKit configuration for deployment and protocol 4 for clients. Preserve
-  the selected 720p/1080p capture ceiling and prepare muted microphone on entry.
+### Changes
 
-### Previous Cloudflare implementation (retained for historical tests)
-
-- Prefer the selected capture quality for visible streams instead of downgrading
-  based on tile width. Hidden streams still request the lowest layer, and SFU
-  bandwidth fallback and the selected resolution cap remain enabled.
-- Base screen sharing on LiveKit's 30-fps presets: 720p at 2 Mbps or 1080p at
-  5 Mbps, plus one half-resolution fallback at a quarter of the primary bitrate.
-  Prefer preserving frame rate for moving video under encoder pressure. Accept
-  both the new two-layer and existing three-layer publications on the API.
-- Apply the motion hint in the publication service so real capture and synthetic
-  tests use the same policy. This corrects the presentation-oriented policy added
-  in the initial preset change; automatic SFU quality recovery remains unresolved.
+- Select LiveKit or Cloudflare SFU with the server's `MEDIA_PROVIDER` setting.
+  Web and desktop clients discover the provider when joining.
+- Share each screen with one video encoding at up to 30 FPS. The 720p and 1080p
+  profiles prioritize motion and keep their respective 2 Mb/s and 5 Mb/s ceilings.
+- On Cloudflare, recover an ended remote track while keeping healthy audio and video connected.
+- Press Ctrl+Shift+D in a room to export two local WebRTC samples. When available,
+  the export includes source, encoded and received frame counters, freeze duration,
+  packet loss and round-trip time.
 
 ## 1.1.1
 
