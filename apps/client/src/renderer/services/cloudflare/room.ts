@@ -9,8 +9,13 @@ import { MediaDiagnostics } from './diagnostics'
 import { screenEncodings } from './quality'
 
 type ConnectionState = 'connected' | 'reconnecting' | 'disconnected'
-type Subscription = { source: PublishedTrack; mid: string }
+type Subscription = { source: PublishedTrack; transceiver: RTCRtpTransceiver }
 const trackKey = (track: PublishedTrack) => `${track.sessionId}:${track.trackName}`
+
+function receivingTrack({ transceiver }: Subscription): MediaStreamTrack | undefined {
+  const { currentDirection, receiver } = transceiver
+  if ((currentDirection === 'recvonly' || currentDirection === 'sendrecv') && receiver.track.readyState === 'live') return receiver.track
+}
 
 export class SignalingError extends Error {
   constructor(public readonly status: number) {
@@ -201,10 +206,13 @@ export class CloudflareRoomService {
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
     const generation = this.generation
     const queued = performance.now()
-    const result = this.queue.then(() => {
+    const result = this.queue.then(async () => {
       if (generation !== this.generation) throw new DOMException('Session changed', 'AbortError')
       this.diagnostics.record('queue.wait', performance.now() - queued)
-      return operation()
+      const value = await operation()
+      // A later SDP exchange can inactivate an existing receiver without ending its track.
+      if ([...this.subscriptions.values()].some(subscription => !receivingTrack(subscription))) this.schedule()
+      return value
     })
     this.queue = result.catch(() => undefined)
     return result
@@ -251,17 +259,15 @@ export class CloudflareRoomService {
     }
     pc.ontrack = (event) => {
       if (this.pc !== pc) return
-      const mid = event.transceiver.mid
       event.track.onended = () => {
         if (this.pc !== pc) return
         this.emitSnapshot()
-        if ([...this.subscriptions.values()].some((subscription) => subscription.mid === mid &&
+        if ([...this.subscriptions.values()].some((subscription) => subscription.transceiver === event.transceiver &&
           this.presence.tracks.some((source) => trackKey(source) === trackKey(subscription.source)))) {
           logClient('warn', 'media.remote_track.ended')
           this.schedule()
         }
       }
-      this.emitSnapshot()
     }
     pc.onconnectionstatechange = () => {
       if (this.pc !== pc) return
@@ -408,55 +414,59 @@ export class CloudflareRoomService {
     if (this.needsReset) {
       this.disposePeer()
       // Reset even an idle session to withdraw any partially published tracks.
-      await this.ensurePeer()
-      await this.publish()
+      try {
+        await this.ensurePeer()
+        await this.publish()
+      } catch (error) {
+        // A connected replacement transport can still have no accepted publications.
+        if (this.credentials) this.needsReset = true
+        throw error
+      }
     }
     // Warm the transport as soon as room signaling is ready, even for a muted viewer.
-    const transceivers = (await this.ensurePeer()).getTransceivers()
+    await this.ensurePeer()
     const wanted = this.presence.tracks.filter((t) => t.participantIdentity !== this.credentials!.identity &&
       (t.source === 'microphone' || !this.pausedShares.has(`${t.participantIdentity}:${t.sessionId}`)))
     const keys = new Set(wanted.map(trackKey))
-    // Close just the missing or ended receivers. Still-advertised tracks are pulled again below.
-    const removed = [...this.subscriptions.entries()].filter(([key, { mid }]) =>
-      !keys.has(key) || transceivers.find(t => t.mid === mid)?.receiver.track.readyState !== 'live')
-    if (removed.length) {
-      await this.closeTransceivers(removed.flatMap(([, subscription]) =>
-        transceivers.filter((t) => t.mid === subscription.mid)))
-      for (const [key, subscription] of removed) {
-        const transceiver = this.pc?.getTransceivers().find((t) => t.mid === subscription.mid)
-        transceiver?.receiver.track.stop()
-        this.subscriptions.delete(key)
-      }
-      this.emitSnapshot()
-    }
+    // Retire withdrawn or unusable receivers. Still-advertised tracks are pulled again below.
+    const removed = [...this.subscriptions.values()].filter(subscription =>
+      !keys.has(trackKey(subscription.source)) || !receivingTrack(subscription))
+    await this.closeSubscriptions(removed)
     const added = wanted.filter((t) => !this.subscriptions.has(trackKey(t)))
     for (let offset = 0; offset < added.length; offset += 32) {
       const batch = added.slice(offset, offset + 32)
       const pc = await this.ensurePeer()
       await this.observe('media.subscribe', async () => {
-        let negotiated = false
+        let receivedResponse = false
         try {
           const result = await this.api<SfuResponse>('tracks', {
             tracks: batch.map((t) => ({ location: 'remote', sessionId: t.sessionId, trackName: t.trackName })),
           })
-          // ontrack may fire during setRemoteDescription, so register mids before negotiation.
-          for (const track of result.tracks ?? []) {
-            const source = batch.find((t) => t.sessionId === track.sessionId && t.trackName === track.trackName)
-            if (source && track.mid && !track.errorCode) this.subscriptions.set(trackKey(source), { source, mid: track.mid })
-          }
-          // Partial track failures can accompany a valid offer for successful tracks.
-          // Complete that exchange before retrying only the missing subscriptions.
+          receivedResponse = true
+          // ontrack can precede the SFU accepting our answer. Only expose confirmed receivers.
           await this.negotiate({ ...result, tracks: undefined }, pc)
-          negotiated = true
-          if (batch.some((t) => !this.subscriptions.has(trackKey(t)))) throw new Error('Incomplete subscription response')
           await this.waitConnected(pc)
-          this.emitSnapshot()
+          const transceivers = pc.getTransceivers()
+          for (const track of result.tracks ?? []) {
+            const source = batch.find(t => t.sessionId === track.sessionId && t.trackName === track.trackName)
+            if (!source || !track.mid || track.errorCode) continue
+            const transceiver = transceivers.find(t => t.mid === track.mid)
+            if (!transceiver || transceiver.receiver.track.kind !== source.kind) throw new Error('Subscription MID does not match the negotiated receiver')
+            this.subscriptions.set(trackKey(source), { source, transceiver })
+          }
         } catch (error) {
-          // A publication can disappear between discovery and this request. The server
-          // rejects it before touching SDP, so keep unrelated media and retry discovery.
-          // Other failures may partially change SDP and require a fresh session.
-          if (!negotiated && !(error instanceof SignalingError && [403, 409, 429].includes(error.status))) this.needsReset = true
+          const refusedBeforeOffer = !receivedResponse && error instanceof SignalingError && [403, 409, 429].includes(error.status)
+          if (this.pc === pc && !refusedBeforeOffer) {
+            this.disposePeer()
+            this.needsReset = true
+          }
           throw error
+        }
+        // Preserve healthy tracks from a partial offer; back off if a requested receiver is still unusable.
+        this.emitSnapshot()
+        for (const source of batch) {
+          const subscription = this.subscriptions.get(trackKey(source))
+          if (!subscription || !receivingTrack(subscription)) throw new Error('Incomplete subscription response')
         }
       })
     }
@@ -465,19 +475,21 @@ export class CloudflareRoomService {
   private closeShareSubscriptions(shareKey: string): Promise<void> {
     if (!this.signalingAvailable) return Promise.resolve()
     return this.enqueue(async () => {
-      const removed = [...this.subscriptions.entries()].filter(([, subscription]) =>
+      const removed = [...this.subscriptions.values()].filter(subscription =>
         subscription.source.source !== 'microphone' &&
         `${subscription.source.participantIdentity}:${subscription.source.sessionId}` === shareKey)
-      if (!removed.length || !this.credentials) return
-      await this.closeTransceivers(removed.flatMap(([, subscription]) =>
-        this.pc?.getTransceivers().filter((t) => t.mid === subscription.mid) ?? []))
-      for (const [key, subscription] of removed) {
-        const transceiver = this.pc?.getTransceivers().find((item) => item.mid === subscription.mid)
-        transceiver?.receiver.track.stop()
-        this.subscriptions.delete(key)
-      }
-      this.emitSnapshot()
+      await this.closeSubscriptions(removed)
     })
+  }
+
+  private async closeSubscriptions(removed: Subscription[]): Promise<void> {
+    if (!removed.length || !this.credentials) return
+    await this.closeTransceivers(removed.map(s => s.transceiver))
+    for (const { source, transceiver } of removed) {
+      transceiver.receiver.track.stop()
+      this.subscriptions.delete(trackKey(source))
+    }
+    this.emitSnapshot()
   }
 
   private schedule(): void {
@@ -569,10 +581,11 @@ export class CloudflareRoomService {
         streamName: source.sessionId,
       })
     }
-    for (const { source, mid } of this.subscriptions.values()) {
+    for (const subscription of this.subscriptions.values()) {
+      const { source } = subscription
       if (!this.presence.tracks.some((track) => trackKey(track) === trackKey(source))) continue
-      const track = this.pc?.getTransceivers().find((t) => t.mid === mid)?.receiver.track
-      if (!track || track.readyState === 'ended') continue
+      const track = receivingTrack(subscription)
+      if (!track) continue
       if (source.source === 'microphone') {
         remoteVoiceTracks.push({ key: trackKey(source), participantIdentity: source.participantIdentity,
           participantName: source.participantName, track })

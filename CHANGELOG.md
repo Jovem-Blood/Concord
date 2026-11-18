@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.1
+
+- On Cloudflare, start remote screen playback after the SFU accepts the negotiated
+  tracks. If the subscription handshake fails partway through, rebuild the
+  connection and restore the active subscriptions.
+- Subscribe again when a previously negotiated receiver becomes inactive.
+  A working game audio track keeps playing while its video receiver recovers.
+- Retry screen publication if a replacement media session fails to restore the
+  existing capture after a disconnect.
+
 ## 1.2.0
 
 ### Compatibility

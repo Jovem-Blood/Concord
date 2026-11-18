@@ -26,12 +26,12 @@ class FakePeer extends EventTarget {
   onconnectionstatechange: (() => void) | null = null
   ontrack: ((event: { track: FakeTrack; transceiver: { mid: string } }) => void) | null = null
   localDescription: { toJSON: () => unknown } | null = null
-  transceivers: { mid: string; sender: FakeSender; receiver: { track: FakeTrack }; stop: () => void }[] = []
+  transceivers: { mid: string; currentDirection: RTCRtpTransceiverDirection; sender: FakeSender; receiver: { track: FakeTrack }; stop: () => void }[] = []
   constructor() { super(); FakePeer.instances.push(this) }
   addTransceiver(track: FakeTrack, init: RTCRtpTransceiverInit) {
     const sender = new FakeSender(track)
     sender.parameters.encodings = structuredClone(init.sendEncodings ?? [])
-    const transceiver = { mid: String(this.transceivers.length), sender, receiver: { track: new FakeTrack(track.kind, 'unused') }, stop: vi.fn() }
+    const transceiver = { mid: String(this.transceivers.length), currentDirection: 'sendonly' as const, sender, receiver: { track: new FakeTrack(track.kind, 'unused') }, stop: vi.fn() }
     this.transceivers.push(transceiver)
     return transceiver
   }
@@ -44,7 +44,7 @@ class FakePeer extends EventTarget {
       const incoming = JSON.parse(description.sdp) as { mid: string; kind: string }[]
       for (const item of incoming) {
         const track = new FakeTrack(item.kind, `remote-${item.mid}`)
-        const transceiver = { mid: item.mid, sender: new FakeSender(null), receiver: { track }, stop: vi.fn() }
+        const transceiver = { mid: item.mid, currentDirection: 'recvonly' as const, sender: new FakeSender(null), receiver: { track }, stop: vi.fn() }
         this.transceivers.push(transceiver)
         this.ontrack?.({ track, transceiver })
       }
@@ -334,6 +334,33 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     expect(states[states.length - 1]).toBe('connected')
   })
 
+  it.each(['session', 'tracks'])('restores both sharing tracks after a failed recovery request to %s', async (path) => {
+    const { connect, service, stream, fetcher, states, calls } = setup()
+    await connect()
+    const capture = stream()
+    await service.publishScreen(capture.media, '720p')
+    const fetchNormally = fetcher.getMockImplementation()!
+    let rejectOnce = true
+    fetcher.mockImplementation(async (url, options) => {
+      if (rejectOnce && url.endsWith('/v1/' + path)) {
+        rejectOnce = false
+        return new Response('{}', { status: 503 })
+      }
+      return fetchNormally(url, options)
+    })
+    const peer = FakePeer.instances[0]!
+    peer.connectionState = 'failed'
+    peer.onconnectionstatechange?.()
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(rejectOnce).toBe(false)
+    expect(states[states.length - 1]).toBe('reconnecting')
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(states[states.length - 1]).toBe('connected')
+    const recovered = FakePeer.instances[FakePeer.instances.length - 1]!
+    expect(recovered.transceivers.map(t => t.sender.track)).toEqual(capture.tracks)
+    expect(capture.tracks.every(t => t.readyState === 'live')).toBe(true)
+    expect(calls.filter(call => call.path === 'tracks')).toHaveLength(2)
+  })
   it('keeps media alive through a brief ICE disconnect', async () => {
     const { connect, service, stream, states } = setup()
     await connect()
@@ -434,7 +461,7 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     expect(FakePeer.instances).toEqual([peer])
   })
   it('serializes screen publication behind an outstanding subscription answer', async () => {
-    const { connect, service, presence, calls, fetcher, stream } = setup()
+    const { connect, service, presence, calls, fetcher, stream, snapshots } = setup()
     await connect()
     const originalFetch = fetcher.getMockImplementation()!
     let acceptAnswer!: () => void
@@ -448,10 +475,94 @@ describe('Cloudflare WebRTC room lifecycle', () => {
     const publishing = service.publishScreen(stream().media, '720p')
     await vi.advanceTimersByTimeAsync(0)
     expect(calls.filter((call) => call.path === 'tracks')).toHaveLength(1)
+    const exposedBeforeAnswer = snapshots.some(s => s.shares.some(share => share.videoTrack))
     acceptAnswer()
     await publishing
+    expect(exposedBeforeAnswer).toBe(false)
+    expect(snapshots[snapshots.length - 1]!.shares[0]!.videoTrack).toBeDefined()
     expect(calls.filter((call) => call.path === 'tracks')).toHaveLength(2)
     expect(FakePeer.instances).toHaveLength(1)
+  })
+  it.each([409, 429])('recovers both screen tracks when the subscription answer is rejected with %s', async status => {
+    const { connect, service, presence, fetcher, snapshots } = setup()
+    await connect()
+    const fetchNormally = fetcher.getMockImplementation()!
+    let rejectAnswer = true
+    fetcher.mockImplementation(async (url, options) => {
+      if (rejectAnswer && url.endsWith('/renegotiate')) {
+        rejectAnswer = false
+        return new Response('{}', { status })
+      }
+      return fetchNormally(url, options)
+    })
+    const publisher = { sessionId: 'publisher', participantIdentity: 'remote', participantName: 'Remote' }
+    presence.tracks.push(
+      { ...publisher, trackName: 'screen', kind: 'video', source: 'screen-video' },
+      { ...publisher, trackName: 'game', kind: 'audio', source: 'screen-audio' },
+    )
+    service.updatePresence(presence)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(snapshots.some(s => s.shares.some(share => share.videoTrack || share.audioTrack))).toBe(false)
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(FakePeer.instances).toHaveLength(2)
+    expect(snapshots[snapshots.length - 1]!.shares[0]).toMatchObject({ videoTrack: { kind: 'video' }, audioTrack: { kind: 'audio' } })
+  })
+
+  it('repairs a live receiver made inactive by a later offer while keeping a muted receiving track', async () => {
+    const { connect, presence, fetcher, calls, update, snapshots } = setup()
+    const publisher = { sessionId: 'publisher', participantIdentity: 'remote', participantName: 'Remote' }
+    presence.tracks.push(
+      { ...publisher, trackName: 'screen', kind: 'video', source: 'screen-video' },
+      { ...publisher, trackName: 'game', kind: 'audio', source: 'screen-audio' },
+    )
+    await connect()
+    const peer = FakePeer.instances[0]!
+    const [oldVideo, audio] = peer.transceivers
+    audio!.receiver.track.muted = true
+    const fetchNormally = fetcher.getMockImplementation()!
+    let changeDirection = true
+    fetcher.mockImplementation(async (url, options) => {
+      if (changeDirection && url.endsWith('/renegotiate')) {
+        oldVideo!.currentDirection = 'inactive'
+        changeDirection = false
+      }
+      return fetchNormally(url, options)
+    })
+    presence.tracks.push({ ...publisher, trackName: 'third', source: 'microphone', kind: 'audio' })
+    await update()
+    expect(oldVideo!.receiver.track.readyState).toBe('live')
+    await vi.advanceTimersByTimeAsync(3000)
+    const share = snapshots[snapshots.length - 1]!.shares[0]!
+    expect(share.videoTrack).toBeDefined()
+    expect(share.videoTrack).not.toBe(oldVideo!.receiver.track)
+    expect(share.audioTrack).toBe(audio!.receiver.track)
+    expect(calls.filter(c => c.path === 'tracks/close').map(c => c.body.mids)).toEqual([[oldVideo!.mid]])
+    expect(FakePeer.instances).toEqual([peer])
+  })
+  it('backs off when new video receivers keep negotiating inactive and keeps the accepted game audio', async () => {
+    const { connect, presence, fetcher, calls, update, snapshots } = setup()
+    await connect()
+    const peer = FakePeer.instances[0]!
+    const fetchNormally = fetcher.getMockImplementation()!
+    fetcher.mockImplementation(async (url, options) => {
+      if (url.endsWith('/renegotiate')) {
+        for (const t of peer.transceivers) if (t.receiver.track.kind === 'video') t.currentDirection = 'inactive'
+      }
+      return fetchNormally(url, options)
+    })
+    const publisher = { sessionId: 'publisher', participantIdentity: 'remote', participantName: 'Remote' }
+    presence.tracks.push(
+      { ...publisher, trackName: 'screen', kind: 'video', source: 'screen-video' },
+      { ...publisher, trackName: 'game', kind: 'audio', source: 'screen-audio' },
+    )
+    await update()
+    const audio = snapshots[snapshots.length - 1]!.shares[0]!.audioTrack
+    expect(audio).toBeDefined()
+    await vi.advanceTimersByTimeAsync(6_500)
+    expect(calls.filter(c => c.path === 'tracks')).toHaveLength(2)
+    expect(snapshots[snapshots.length - 1]!.shares[0]!.audioTrack).toBe(audio)
+    expect(snapshots.some(s => s.shares.some(share => share.videoTrack))).toBe(false)
+    expect(FakePeer.instances).toEqual([peer])
   })
   it('keeps existing media when a discovered track disappears before subscription', async () => {
     const { connect, service, presence, fetcher, snapshots } = setup()
