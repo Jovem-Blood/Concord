@@ -6,7 +6,10 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json .npmrc ./
 COPY apps/client/package.json apps/client/package.json
 COPY packages/protocol packages/protocol
-RUN pnpm install --frozen-lockfile --filter @concord/client...
+# The client's postinstall explicitly downloads the desktop runtime. Omit it
+# from this build-stage manifest while preserving dependency hooks for Vite.
+RUN npm --prefix apps/client pkg delete scripts.postinstall \
+    && pnpm install --frozen-lockfile --filter @concord/client...
 
 COPY apps/client apps/client
 ARG VITE_SERVER_URL
