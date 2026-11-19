@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client'
-import { ACK_MS, PROTOCOL_VERSION, RECOVERY_MS, RENEW_BEFORE_MS, RETRY_MS, SOCKET_PATH, TYPING_MS, validContent,
+import { ACK_MS, compactMediaSample, PROTOCOL_VERSION, RECOVERY_MS, RENEW_BEFORE_MS, RETRY_MS, SOCKET_PATH, TYPING_MS, validContent,
   type ClientEvents, type Credentials, type ErrorCode, type Message, type Presence, type ReactionEmoji, type ReplyReference, type Result, type SendMessage, type ServerEvents, type SyncState } from '@concord/protocol'
 import type { CaptureResolution } from '../../shared/capture'
 import type { CloudflareRoomService } from './cloudflare/room'
@@ -49,6 +49,7 @@ export class RoomSession {
   private serverClockOffset = 0
   private lastHeartbeat = 0
   private heartbeatListener?: () => void
+  private diagnosticsUpload?: AbortController
   private recoveryTimer?: ReturnType<typeof setTimeout>
   private renewTimer?: ReturnType<typeof setTimeout>
   private typingTimer?: ReturnType<typeof setTimeout>
@@ -405,6 +406,8 @@ export class RoomSession {
   }
 
   async disconnect(unloading = false, notifyServer = true, recoverDrafts = false): Promise<void> {
+    this.diagnosticsUpload?.abort()
+    this.diagnosticsUpload = undefined
     this.recoveryOperation?.end(undefined, 'cancelled'); this.recoveryOperation = undefined
     const credentials = this.credentials
     const socket = this.socket
@@ -452,5 +455,22 @@ export class RoomSession {
   unpublishMicrophone(): Promise<void> { return this.media.unpublishMicrophone() }
   pauseShare(key: string): Promise<void> { return this.media.pauseShare(key) }
   getDiagnostics() { return this.media.getDiagnostics?.() }
+  async sendMediaDiagnostics(trigger: 'share-change' | 'healthcheck' = 'healthcheck'): Promise<void> {
+    if (!this.ready() || this.diagnosticsUpload) return
+    const controller = new AbortController()
+    this.diagnosticsUpload = controller
+    try {
+      const sample = compactMediaSample(await this.getDiagnostics())
+      if (!sample || controller.signal.aborted || !this.ready() || !this.credentials) return
+      await fetch(`${serverUrl}/v1/media-diagnostics`, {
+        method: 'POST', headers: { authorization: `Bearer ${this.credentials.participantToken}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ ...sample, trigger }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]),
+      })
+    } catch {
+      // Best effort. The next health check collects a fresh sample.
+    } finally {
+      if (this.diagnosticsUpload === controller) this.diagnosticsUpload = undefined
+    }
+  }
   resumeShare(key: string): Promise<void> { return this.media.resumeShare(key) }
 }

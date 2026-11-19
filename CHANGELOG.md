@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.2
+
+- Web and desktop clients send WebRTC statistics when a screen share opens or
+  reopens and on the 15-second health check during sharing. Temporary room and
+  participant IDs let operators compare sender and viewer samples by time.
+- Store samples in two rotating files in the API's persistent volume. The
+  default budget is 16 MiB in total. Set `MEDIA_DIAGNOSTICS_MAX_BYTES` to
+  change the budget or to `0` to disable collection.
+
 ## 1.2.1
 
 - On Cloudflare, start remote screen playback after the SFU accepts the negotiated

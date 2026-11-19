@@ -76,6 +76,33 @@ function fixture() {
 }
 
 describe('RoomSession controller', () => {
+  it('uploads one filtered media sample at a time only while joined', async () => {
+    const { session, join, media, fetcher } = fixture()
+    let resolve!: (value: unknown) => void
+    media.getDiagnostics = vi.fn(() => new Promise(done => { resolve = done }))
+    await session.sendMediaDiagnostics()
+    expect(media.getDiagnostics).not.toHaveBeenCalled()
+    await join()
+    fetcher.mockClear()
+    const sampling = session.sendMediaDiagnostics()
+    await session.sendMediaDiagnostics()
+    expect(media.getDiagnostics).toHaveBeenCalledTimes(1)
+    resolve({ provider: 'livekit', capturedAt: 42, tracks: [{ kind: 'video', type: 'inbound-rtp', framesDecoded: 12, label: 'private' }],
+      transport: { subscriber: { currentRoundTripTime: 0.08, address: 'private' } } })
+    await sampling
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(fetcher).toHaveBeenCalledWith(expect.stringContaining('/v1/media-diagnostics'), expect.objectContaining({
+      method: 'POST', headers: { authorization: `Bearer ${credentials.participantToken}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'livekit', capturedAt: 42, tracks: [{ kind: 'video', type: 'inbound-rtp', framesDecoded: 12 }],
+        transport: { subscriber: { currentRoundTripTime: 0.08 } }, trigger: 'healthcheck' }),
+    }))
+    const stale = session.sendMediaDiagnostics()
+    await session.disconnect()
+    fetcher.mockClear()
+    resolve({ provider: 'livekit', tracks: [], capturedAt: 43 })
+    await stale
+    expect(fetcher).not.toHaveBeenCalled()
+  })
   it('synchronizes mute state on join, changes and reconnection without publishing media', async () => {
     const { session, socket, join, media } = fixture()
     const emit = vi.spyOn(socket, 'emit')

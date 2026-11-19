@@ -8,6 +8,15 @@ const requiredEnvironment = {
 }
 
 describe('server configuration', () => {
+  it('bounds diagnostic storage by default and accepts an override or explicit disable', () => {
+    expect(loadConfig(requiredEnvironment).mediaDiagnostics?.maxBytes).toBe(16 * 1024 * 1024)
+    expect(loadConfig({ ...requiredEnvironment, MEDIA_DIAGNOSTICS_MAX_BYTES: '0' }).mediaDiagnostics).toBeUndefined()
+    expect(loadConfig({ ...requiredEnvironment, MEDIA_DIAGNOSTICS_MAX_BYTES: '262144', MEDIA_DIAGNOSTICS_DIR: 'stats' }).mediaDiagnostics)
+      .toEqual({ maxBytes: 262144, directory: 'stats' })
+    for (const value of ['-1', 'NaN', '100.5']) {
+      expect(() => loadConfig({ ...requiredEnvironment, MEDIA_DIAGNOSTICS_MAX_BYTES: value })).toThrow('MEDIA_DIAGNOSTICS_MAX_BYTES')
+    }
+  })
   it('selects Cloudflare explicitly even when LiveKit credentials remain configured', () => {
     const config = loadConfig({ ...requiredEnvironment, MEDIA_PROVIDER: 'cloudflare', LIVEKIT_URL: 'unused' })
     expect(config.cloudflareSfu).toBeDefined()

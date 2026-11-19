@@ -157,6 +157,11 @@ Run exactly one `server` instance: room presence, tokens, and publications are k
 | `VITE_WEB_APP_URL` | Base URL used by desktop invite links |
 | `LOG_LEVEL` | Server log threshold (`error`, `warn`, `info`, `debug`); defaults to `info` |
 | `VITE_LOG_LEVEL` | Client console threshold; defaults to `info` |
+| `MEDIA_DIAGNOSTICS_MAX_BYTES` | Total media diagnostics storage budget in bytes. The default is 16 MiB. Set to `0` to disable collection. |
+
+During a screen share, clients send a WebRTC sample when video starts or reopens and then on each 15-second health check. They use the authenticated `POST /v1/media-diagnostics` endpoint. Samples contain the browser family and available resolution, frame, freeze and network counters. Temporary IDs allow comparing samples from the same room by time. The files contain technical data only and exclude screen content, audio and chat.
+
+On the server, run `docker compose exec -T server cat /app/media-diagnostics/current.ndjson` to read recent samples. After the first rotation, `previous.ndjson` contains the preceding samples. Each file uses up to half the storage budget. The volume persists across container recreation.
 
 OpenTelemetry export is optional and supports OTLP HTTP/protobuf, HTTP/JSON and gRPC destinations. Without a configured endpoint it stays disabled. A separate Grafana Compose reference includes traces, logs, metrics, a dashboard and alert rules. See [Optional observability](docs/observability.md) for setup, existing-backend integration and notification configuration.
 

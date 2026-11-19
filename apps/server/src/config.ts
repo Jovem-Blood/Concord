@@ -5,6 +5,7 @@ export type ServerConfig = {
   livekit?: { url: string; apiKey: string; apiSecret: string }
   cloudflareTurn?: { keyId: string; apiToken: string }
   allowedOrigins: string[]
+  mediaDiagnostics?: { directory: string; maxBytes: number }
 }
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -27,9 +28,12 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): Server
     throw new Error('CLOUDFLARE_TURN_KEY_ID and CLOUDFLARE_TURN_API_TOKEN must be provided together')
   }
 
+  const maxBytes = Number(environment.MEDIA_DIAGNOSTICS_MAX_BYTES?.trim() || 16 * 1024 * 1024)
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) throw new Error('MEDIA_DIAGNOSTICS_MAX_BYTES must be a non-negative integer')
   return {
     host: environment.HOST ?? '0.0.0.0',
     port: Number.parseInt(environment.PORT ?? '3001', 10),
+    ...(maxBytes > 0 ? { mediaDiagnostics: { directory: environment.MEDIA_DIAGNOSTICS_DIR?.trim() || 'media-diagnostics', maxBytes } } : {}),
     ...(!useLiveKit && appId && appSecret ? { cloudflareSfu: { appId, appSecret } } : {}),
     ...(useLiveKit && url && apiKey && apiSecret ? { livekit: { url, apiKey, apiSecret } } : {}),
     ...(!useLiveKit && turnKeyId && turnApiToken ? { cloudflareTurn: { keyId: turnKeyId, apiToken: turnApiToken } } : {}),

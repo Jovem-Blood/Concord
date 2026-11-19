@@ -9,3 +9,4 @@ apps/client/.vite
 apps/client/out
 apps/client/dist-web
 coverage
+**/media-diagnostics

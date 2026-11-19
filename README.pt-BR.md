@@ -157,6 +157,11 @@ Execute exatamente uma instância de `server`: presença, tokens e publicações
 | `VITE_WEB_APP_URL` | URL-base usada nos convites copiados pelo desktop |
 | `LOG_LEVEL` | Nível mínimo dos logs do servidor (`error`, `warn`, `info`, `debug`); padrão `info` |
 | `VITE_LOG_LEVEL` | Nível mínimo do console do cliente; padrão `info` |
+| `MEDIA_DIAGNOSTICS_MAX_BYTES` | Teto total dos arquivos de diagnóstico de mídia em bytes. O padrão é 16 MiB e `0` desativa a coleta. |
+
+Durante um compartilhamento, os clientes enviam uma amostra de WebRTC ao iniciar ou reabrir o vídeo e depois a cada healthcheck de 15 segundos. O envio usa `POST /v1/media-diagnostics` com a sessão da sala. As amostras registram família do navegador, resolução, quadros, congelamentos e contadores de rede disponíveis. IDs temporários permitem comparar os lados da mesma sala por horário. Os arquivos contêm apenas dados técnicos e não gravam a tela, o som ou o chat.
+
+No servidor, use `docker compose exec -T server cat /app/media-diagnostics/current.ndjson` para ler as amostras recentes. Após a primeira rotação, `previous.ndjson` contém as anteriores. Cada arquivo usa até metade do teto. O volume persiste quando o contêiner é recriado.
 
 A exportação OpenTelemetry é opcional e aceita destinos OTLP por HTTP/protobuf, HTTP/JSON ou gRPC. Sem endpoint configurado, fica desativada. Há um Compose Grafana separado, com traces, logs, métricas, dashboard e regras de alerta. Veja [Observabilidade opcional](docs/observability.md) para ativar, conectar sua própria stack e configurar notificações.
 

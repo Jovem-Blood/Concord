@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join as joinPath } from 'node:path'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { buildApp } from './app.js'
 import type { ServerConfig } from './config.js'
 import type { SfuClient, SfuTrack } from './sfu.js'
@@ -15,7 +18,7 @@ afterEach(async () => {
   vi.useRealTimers()
   await Promise.all(apps.splice(0).map((app) => app.close()))
 })
-async function fixture() {
+async function fixture(overrides: Partial<ServerConfig> = {}) {
   let sessionNumber = 0
   const sfu: SfuClient = {
     createSession: vi.fn(async () => ({ sessionId: `session-${++sessionNumber}` })),
@@ -28,7 +31,7 @@ async function fixture() {
         ...(operation === 'tracks/new' || operation === 'tracks/close' ? { sessionDescription: { type: 'answer' as const, sdp: 'answer-sdp' } } : {}) }
     }),
   }
-  const app = await buildApp(config, sfu)
+  const app = await buildApp({ ...config, ...overrides }, sfu)
   apps.push(app)
   const url = await app.listen({ host: '127.0.0.1', port: 0 })
   const clients = new Map<string, Socket<ServerEvents, ClientEvents>>()
@@ -64,6 +67,32 @@ async function fixture() {
 }
 
 describe('Cloudflare room signaling', () => {
+  it('stores only bounded media statistics from authenticated room members and keeps GET /health read-only', async () => {
+    const directory = await mkdtemp(joinPath(tmpdir(), 'concord-media-api-'))
+    onTestFinished(() => rm(directory, { recursive: true, force: true }))
+    const { app, join } = await fixture({ mediaDiagnostics: { directory, maxBytes: 256 * 1024 } })
+    const path = joinPath(directory, 'current.ndjson')
+    expect((await app.inject('/health')).json().mediaDiagnostics).toBe(true)
+    expect(await readFile(path, 'utf8')).toBe('')
+    const url = '/v1/media-diagnostics'
+    const payload = { provider: 'cloudflare', capturedAt: 1234, trigger: 'share-change', tracks: [
+      { type: 'outbound-rtp', kind: 'video', mid: '2', frameHeight: 720, qualityLimitationReason: 'bandwidth', trackIdentifier: 'sensitive' },
+    ], transport: { currentRoundTripTime: 0.02, address: 'sensitive' }, room: 'sensitive', events: [{ name: 'sensitive', at: 10 }] }
+    expect((await app.inject({ method: 'POST', url, payload })).statusCode).toBe(401)
+    const { headers, data, socket } = await join()
+    const sync = await socket.timeout(1500).emitWithAck('session:sync', { conversation: '', after: 0 })
+    if (!sync.ok) throw new Error(sync.code)
+    expect((await app.inject({ method: 'POST', url, headers, payload: { tracks: [] } })).statusCode).toBe(400)
+    expect((await app.inject({ method: 'POST', url, headers, payload: { ...payload, extra: 'x'.repeat(65536) } })).statusCode).toBe(413)
+    expect((await app.inject({ method: 'POST', url, headers: { ...headers, 'user-agent': 'Firefox/150.0 sensitive' }, payload })).statusCode).toBe(204)
+    const stored = await readFile(path, 'utf8')
+    expect(JSON.parse(stored)).toEqual({ receivedAt: expect.any(Number), room: sync.value.conversation, participant: data.identity, browser: 'firefox',
+      sample: { provider: 'cloudflare', capturedAt: 1234, trigger: 'share-change', tracks: [{ type: 'outbound-rtp', kind: 'video', mid: '2', frameHeight: 720, qualityLimitationReason: 'bandwidth' }],
+        transport: { currentRoundTripTime: 0.02 }, events: [] } })
+    expect(stored).not.toContain('sensitive')
+    await app.inject('/health')
+    expect(await readFile(path, 'utf8')).toBe(stored)
+  })
   it('prepares authenticated RTC without publishing media and closes the transport on leave', async () => {
     const { app, join, sfu, room } = await fixture()
     const participant = await join()

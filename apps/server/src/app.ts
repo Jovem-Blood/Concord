@@ -2,7 +2,7 @@ import cors from '@fastify/cors'
 import rateLimit from '@fastify/rate-limit'
 import Fastify, { type FastifyRequest } from 'fastify'
 import { createHash } from 'node:crypto'
-import { PROTOCOL_VERSION, validClientEvent } from '@concord/protocol'
+import { compactMediaSample, PROTOCOL_VERSION, validClientEvent } from '@concord/protocol'
 import type { Span } from '@opentelemetry/api'
 import type { Telemetry } from './telemetry.js'
 import { RoomAuthority, type Participant } from './rooms.js'
@@ -11,6 +11,7 @@ import { createLiveKit } from './livekit.js'
 import type { ServerConfig } from './config.js'
 import { parseJoinInput } from './validation.js'
 import { validMediaSource, type MediaSource } from './media.js'
+import { MEDIA_REPORT_BODY_LIMIT, MediaDiagnosticLog } from './media-diagnostic-log.js'
 import { createSfuClient, UpstreamHttpError, type SfuClient, type SessionDescription, type SfuTrack } from './sfu.js'
 
 function fail(statusCode: number, message: string): never {
@@ -42,6 +43,10 @@ export async function buildApp(
     bodyLimit: 256 * 1024,
   })
   const rooms = new RoomAuthority(closeSession)
+  const mediaLog = config.mediaDiagnostics && new MediaDiagnosticLog(config.mediaDiagnostics.directory, config.mediaDiagnostics.maxBytes)
+  if (mediaLog) app.addHook('onReady', async () => {
+    try { await mediaLog.prepare() } catch { app.log.warn('Media diagnostics storage unavailable; retrying on the next sample') }
+  })
   const requestSpans = new WeakMap<FastifyRequest, Span>()
   app.addHook('onRequest', (request, _reply, done) => {
     const span = telemetry?.requestStarted(request.method, request.routeOptions.url ?? 'unmatched',
@@ -150,7 +155,22 @@ export async function buildApp(
   }
 
   app.get('/v1/media/config', async (_request, reply) => reply.header('cache-control', 'no-store').send({ provider: livekit ? 'livekit' : 'cloudflare' }))
-  app.get('/health', async () => ({ status: 'ok', mediaProvider: livekit ? 'livekit' : 'cloudflare-sfu' }))
+  app.get('/health', async () => ({ status: 'ok', mediaProvider: livekit ? 'livekit' : 'cloudflare-sfu', mediaDiagnostics: Boolean(mediaLog) }))
+  app.post('/v1/media-diagnostics', {
+    onRequest: authenticated.onRequest, bodyLimit: MEDIA_REPORT_BODY_LIMIT, logLevel: 'warn',
+    config: { rateLimit: { ...authenticated.config.rateLimit, max: 12 } },
+  }, async (request, reply) => {
+    const member = authenticate(request)
+    if (!mediaLog) return reply.code(204).send()
+    if (!member.ready || !member.sequenceConversation) fail(403, 'Room is not ready')
+    const sample = compactMediaSample(request.body)
+    if (!sample) return fail(400, 'Invalid media sample')
+    const agent = request.headers['user-agent'] ?? ''
+    const browser = /Electron\//i.test(agent) ? 'electron' : /Firefox\/|FxiOS\//i.test(agent) ? 'firefox' :
+      /Chrom(?:e|ium)\/|CriOS\//i.test(agent) ? 'chromium' : /Safari\//i.test(agent) ? 'safari' : 'other'
+    await mediaLog.append({ receivedAt: Date.now(), room: member.sequenceConversation, participant: member.identity, browser, sample })
+    return reply.code(204).send()
+  })
   app.post('/v1/livekit/token', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
     const bearer = request.headers.authorization?.match(/^Bearer (\S+)$/)?.[1]
     const member = rooms.authenticate(bearer)

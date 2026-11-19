@@ -45,3 +45,8 @@ export interface ServerEvents {
   'chat:typing': (typists: Typist[]) => void
   'session:ended': (code: ErrorCode) => void
 }
+export function compactMediaSample(value: unknown): {
+  provider: 'cloudflare' | 'livekit'; capturedAt: number; trigger?: 'share-change' | 'healthcheck'; connection?: string; signaling?: string
+  tracks: Record<string, number | string>[]; transport: Record<string, unknown>
+  events?: { name: string; at: number; durationMs?: number; outcome?: string }[]
+} | undefined

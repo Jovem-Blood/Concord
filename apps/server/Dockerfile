@@ -18,6 +18,7 @@ COPY --from=build /app/apps/server/dist apps/server/dist
 COPY --from=build /app/apps/server/node_modules apps/server/node_modules
 COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/packages packages
+RUN mkdir -p /app/media-diagnostics && chown node:node /app/media-diagnostics
 USER node
 EXPOSE 3001
 CMD ["node", "apps/server/dist/index.js"]

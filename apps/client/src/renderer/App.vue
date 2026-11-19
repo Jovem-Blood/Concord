@@ -113,6 +113,17 @@ let cleanupPromise: Promise<void> | null = null
 let captureGeneration = 0
 let controlsTimer: ReturnType<typeof setTimeout> | undefined
 let pingTimer: ReturnType<typeof setInterval> | undefined
+let mediaDiagnosticsEnabled = false
+
+// Sample each new publication early enough to distinguish the first share from a restart.
+watch(() => [
+  shareState.value === 'sharing' ? localStream.value?.getVideoTracks()[0]?.id : undefined,
+  ...shares.value.map(share => share.videoTrack?.id),
+].filter(Boolean).sort().join(','), (tracks, _previous, onCleanup) => {
+  if (!tracks) return
+  const timer = setTimeout(() => { if (mediaDiagnosticsEnabled) void roomService.sendMediaDiagnostics('share-change') }, 1000)
+  onCleanup(() => clearTimeout(timer))
+})
 
 const captureEnvironment = captureProvider.capabilities.environment
 const configuredWebAppUrl = String(import.meta.env.VITE_WEB_APP_URL ?? '').trim()
@@ -176,6 +187,7 @@ roomService.onConnection((state, message) => {
     void measurePing()
     if (!pingTimer) pingTimer = setInterval(() => void measurePing(), 15_000)
   } else if (state === 'disconnected') {
+    mediaDiagnosticsEnabled = false
     pingMs.value = null
     if (pingTimer) { clearInterval(pingTimer); pingTimer = undefined }
   }
@@ -253,13 +265,19 @@ async function toggleChat(): Promise<void> {
 }
 
 async function measurePing(): Promise<void> {
+  const generation = captureGeneration
   const startedAt = performance.now()
   try {
     const response = await fetch(`${serverUrl}/health`, { cache: 'no-store', signal: AbortSignal.timeout(5_000) })
+    if (generation !== captureGeneration || roomState.value !== 'connected') return
     if (!response.ok) throw new Error(`Health check failed (${response.status})`)
     pingMs.value = Math.max(0, Math.round(performance.now() - startedAt))
+    const health = await response.json()
+    if (generation !== captureGeneration || roomState.value !== 'connected') return
+    mediaDiagnosticsEnabled = health?.mediaDiagnostics === true
+    if (mediaDiagnosticsEnabled && (shareState.value === 'sharing' || shares.value.length > 0)) void roomService.sendMediaDiagnostics()
   } catch {
-    pingMs.value = null
+    if (generation === captureGeneration && roomState.value === 'connected') pingMs.value = null
   }
 }
 
@@ -526,6 +544,7 @@ onMounted(() => {
 
         <div class="access-feedback">
           <p class="status-note">Ao entrar, prepararemos seu microfone. Você começa silenciado e pode entrar mesmo sem permitir o acesso.</p>
+          <p class="status-note">Durante um compartilhamento de tela, o servidor pode registrar estatísticas de qualidade da transmissão.</p>
           <p v-if="roomState === 'joining'" class="status-note" aria-live="polite">Conectando à sala…</p>
           <p v-if="errorMessage" class="error-banner" role="alert">{{ errorMessage }}</p>
         </div>

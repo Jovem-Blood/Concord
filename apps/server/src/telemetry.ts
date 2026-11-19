@@ -151,7 +151,7 @@ export async function createTelemetry(environment: NodeJS.ProcessEnv = process.e
     enabled: settings.enabled,
     clientConfig: { enabled: settings.enabled, traces: Boolean(settings.enabled && exporters.traces), sampleRatio: settings.sampleRatio },
     requestStarted(method: string, route: string, parent?: string): Span | undefined {
-      if (!settings.enabled || ['/health', '/v1/client-events', '/v1/telemetry'].includes(route)) return undefined
+      if (!settings.enabled || ['/health', '/v1/media-diagnostics', '/v1/client-events', '/v1/telemetry'].includes(route)) return undefined
       const remote = spanContext(parent)
       return tracer.startSpan(`${method} ${route}`, { kind: SpanKind.SERVER,
         attributes: { 'http.request.method': method, 'http.route': route } },

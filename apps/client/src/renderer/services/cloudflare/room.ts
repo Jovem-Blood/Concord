@@ -27,7 +27,7 @@ export class SignalingError extends Error {
 const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.cloudflare.com:3478' }]
 
 export class CloudflareRoomService {
-  private readonly diagnostics = new MediaDiagnostics()
+  private diagnostics = new MediaDiagnostics()
   getDiagnostics() { return this.diagnostics.snapshot(this.pc) }
   private credentials: JoinResponse | null = null
   private pc: RTCPeerConnection | null = null
@@ -115,6 +115,7 @@ export class CloudflareRoomService {
   }
   async connect(credentials: JoinResponse): Promise<void> {
     await this.disconnect()
+    this.diagnostics = new MediaDiagnostics()
     this.credentials = credentials
     this.controller = new AbortController()
     this.failures = 0

@@ -1,4 +1,4 @@
-// Local, bounded diagnostics: never retain SDP, credentials, device names or IP addresses.
+// Bounded statistics shared by the local export and automatic media reports.
 const rtpFields = ['type', 'kind', 'timestamp', 'mid', 'rid', 'bytesReceived', 'bytesSent', 'packetsLost', 'packetsSent',
   'packetsReceived', 'fractionLost', 'roundTripTime', 'jitter', 'framesReceived', 'framesDecoded', 'framesEncoded',
   'framesDropped', 'framesPerSecond', 'frameWidth', 'frameHeight', 'freezeCount', 'totalFreezesDuration',
